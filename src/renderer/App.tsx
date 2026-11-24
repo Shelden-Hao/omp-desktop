@@ -83,6 +83,14 @@ function relativeTime(ts?: number) {
 	return new Date(ts).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
 }
 
+function formatDuration(ms?: number) {
+	if (ms === undefined) return "";
+	const seconds = Math.max(0, Math.floor(ms / 1000));
+	if (seconds < 60) return `${seconds}秒`;
+	const minutes = Math.floor(seconds / 60);
+	return `${minutes}分${seconds % 60}秒`;
+}
+
 function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
 	const common = {
 		width: size,
@@ -230,18 +238,18 @@ function parseMarkdown(source: string): MdBlock[] {
 	return blocks;
 }
 
-function InlineText({ text }: { text: string }) {
+function InlineText({ text, query = "" }: { text: string; query?: string }) {
 	const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g).filter(Boolean);
 	return (
 		<>
 			{parts.map((part, index) => {
 				if (part.startsWith("`") && part.endsWith("`")) {
-					return <code key={index}>{part.slice(1, -1)}</code>;
+					return <code key={index}><Highlight text={part.slice(1, -1)} query={query} /></code>;
 				}
 				if (part.startsWith("**") && part.endsWith("**")) {
-					return <strong key={index}>{part.slice(2, -2)}</strong>;
+					return <strong key={index}><Highlight text={part.slice(2, -2)} query={query} /></strong>;
 				}
-				return <span key={index}>{part}</span>;
+				return <span key={index}><Highlight text={part} query={query} /></span>;
 			})}
 		</>
 	);
@@ -290,27 +298,71 @@ function CodeBlock({
 	);
 }
 
-function Markdown({ text, onOpen }: { text: string; onOpen: (name: string, content: string) => void }) {
+function Markdown({ text, onOpen, query = "" }: { text: string; onOpen: (name: string, content: string) => void; query?: string }) {
 	const blocks = useMemo(() => parseMarkdown(text), [text]);
 	return (
 		<div className="omp-markdown">
 			{blocks.map((block, index) => {
 				if (block.type === "heading") {
 					const Tag = `h${Math.min(block.level + 1, 6)}` as "h2" | "h3" | "h4" | "h5" | "h6";
-					return <Tag key={index}><InlineText text={block.text} /></Tag>;
+					return <Tag key={index}><InlineText text={block.text} query={query} /></Tag>;
 				}
 				if (block.type === "list") {
 					return (
 						<ul key={index}>
-							{block.items.map((item, itemIndex) => <li key={itemIndex}><InlineText text={item} /></li>)}
+							{block.items.map((item, itemIndex) => <li key={itemIndex}><InlineText text={item} query={query} /></li>)}
 						</ul>
 					);
 				}
 				if (block.type === "code") {
 					return <CodeBlock key={index} code={block.text} lang={block.lang} onOpen={onOpen} />;
 				}
-				return <p key={index}><InlineText text={block.text} /></p>;
+				return <p key={index}><InlineText text={block.text} query={query} /></p>;
 			})}
+		</div>
+	);
+}
+
+function Highlight({ text, query }: { text: string; query: string }) {
+	if (!query.trim()) return <>{text}</>;
+	const lower = text.toLowerCase();
+	const target = query.toLowerCase();
+	const parts: Array<{ text: string; hit: boolean }> = [];
+	let cursor = 0;
+	let found = lower.indexOf(target);
+	while (found >= 0) {
+		if (found > cursor) parts.push({ text: text.slice(cursor, found), hit: false });
+		parts.push({ text: text.slice(found, found + query.length), hit: true });
+		cursor = found + query.length;
+		found = lower.indexOf(target, cursor);
+	}
+	if (cursor < text.length) parts.push({ text: text.slice(cursor), hit: false });
+	return <>{parts.map((part, index) => part.hit ? <mark key={index}>{part.text}</mark> : <span key={index}>{part.text}</span>)}</>;
+}
+
+function MessageActions({ text, onRetry }: { text: string; onRetry?: () => void }) {
+	const [copied, setCopied] = useState(false);
+	const copy = async () => {
+		try {
+			await navigator.clipboard.writeText(text);
+			setCopied(true);
+			window.setTimeout(() => setCopied(false), 1400);
+		} catch {
+			setCopied(false);
+		}
+	};
+	return (
+		<div className="omp-message-actions">
+			<button type="button" onClick={() => void copy()} title="复制消息">
+				<Icon name={copied ? "check" : "copy"} size={13} />
+				{copied ? "已复制" : "复制"}
+			</button>
+			{onRetry && (
+				<button type="button" onClick={onRetry} title="重新发送">
+					<Icon name="rotate" size={13} />
+					重试
+				</button>
+			)}
 		</div>
 	);
 }
@@ -321,12 +373,12 @@ const TOOL_STATUS: Record<string, { label: string; icon: IconName }> = {
 	failed: { label: "失败", icon: "warning" },
 };
 
-function Block({ block, onOpenDoc }: { block: ContentBlock; onOpenDoc: (name: string, content: string) => void }) {
+function Block({ block, onOpenDoc, query = "" }: { block: ContentBlock; onOpenDoc: (name: string, content: string) => void; query?: string }) {
 	if (block.type === "thinking") {
 		return (
 			<details className="omp-thinking">
 				<summary><Icon name="spark" size={13} /> 思考过程</summary>
-				<div className="omp-thinking-body"><Markdown text={block.text} onOpen={onOpenDoc} /></div>
+				<div className="omp-thinking-body"><Markdown text={block.text} onOpen={onOpenDoc} query={query} /></div>
 			</details>
 		);
 	}
@@ -360,7 +412,7 @@ function Block({ block, onOpenDoc }: { block: ContentBlock; onOpenDoc: (name: st
 		return <CodeBlock code={block.text} />;
 	}
 
-	return <Markdown text={block.text} onOpen={onOpenDoc} />;
+	return <Markdown text={block.text} onOpen={onOpenDoc} query={query} />;
 }
 
 export function App() {
@@ -385,6 +437,8 @@ export function App() {
 	const [activeDoc, setActiveDoc] = useState<string | null>(null);
 	const [showPreview, setShowPreview] = useState(true);
 	const [sidebarView, setSidebarView] = useState<SidebarView>("recent");
+	const [searchOpen, setSearchOpen] = useState(false);
+	const [searchText, setSearchText] = useState("");
 
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -395,6 +449,9 @@ export function App() {
 	const cancelledSessionRef = useRef<string | null>(null);
 
 	const messages = activeId ? messagesBySession[activeId] || [] : [];
+	const visibleMessages = searchText.trim()
+		? messages.filter((message) => message.blocks.some((block) => block.text.toLowerCase().includes(searchText.trim().toLowerCase())))
+		: messages;
 	const currentDoc = docs.find((doc) => doc.key === activeDoc);
 
 	useEffect(() => {
@@ -662,14 +719,16 @@ export function App() {
 		scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
 	}, [messages.length, permission, running]);
 
-	const send = async () => {
-		const text = input.trim();
+	const send = async (override?: string) => {
+		const text = (override ?? input).trim();
 		if (!client || !activeId || !text || running) return;
 		const sessionId = activeId;
+		const startedAt = Date.now();
+		const userMessageId = uid();
 		setInput("");
 		updateMessages(sessionId, (prev) => [
 			...prev,
-			{ id: uid(), role: "user", blocks: [{ type: "text", text }], ts: Date.now() },
+			{ id: userMessageId, role: "user", blocks: [{ type: "text", text }], ts: startedAt },
 		]);
 		setRunning(true);
 		try {
@@ -690,9 +749,21 @@ export function App() {
 			]);
 		} finally {
 			if (cancelledSessionRef.current === sessionId) cancelledSessionRef.current = null;
+			updateMessages(sessionId, (prev) =>
+				prev.map((item) => (item.id === userMessageId ? { ...item, durationMs: Date.now() - startedAt } : item)),
+			);
 			setRunning(false);
 			inputRef.current?.focus();
 		}
+	};
+
+	const retryMessage = (message: ChatMessage) => {
+		const text = message.blocks
+			.filter((block) => block.type === "text")
+			.map((block) => block.text)
+			.join("\n")
+			.trim();
+		if (text) void send(text);
 	};
 
 	const cancel = () => {
@@ -952,13 +1023,18 @@ export function App() {
 
 				<main className="omp-main">
 					<div className="omp-topbar">
-						<div className="omp-breadcrumb">
-							<span>会话</span>
-							<span className="omp-crumb-sep">/</span>
-							<strong>{activeTitle}</strong>
-						</div>
+						<strong className="omp-topbar-title" title={activeTitle}>{activeTitle}</strong>
 						<div className="omp-topbar-actions">
 							<span className="omp-topbar-status" title={status}>{status}</span>
+							<button
+								type="button"
+								className={`omp-icon-button ${searchOpen ? "active" : ""}`}
+								onClick={() => { setSearchOpen((value) => !value); if (searchOpen) setSearchText(""); }}
+								title="搜索当前会话"
+								aria-label="搜索当前会话"
+							>
+								<Icon name="search" size={15} />
+							</button>
 							<button
 								type="button"
 								className={`omp-icon-button ${showPreview ? "active" : ""}`}
@@ -970,24 +1046,43 @@ export function App() {
 							</button>
 						</div>
 					</div>
+					{searchOpen && (
+						<div className="omp-searchbar">
+							<Icon name="search" size={14} />
+							<input
+								autoFocus
+								value={searchText}
+								onChange={(event) => setSearchText(event.target.value)}
+								placeholder="在当前会话中搜索…"
+								aria-label="搜索当前会话消息"
+							/>
+							{searchText && <span className="omp-search-count">{messages.filter((m) => m.blocks.some((b) => b.text.toLowerCase().includes(searchText.toLowerCase()))).length} 条结果</span>}
+							<button type="button" className="omp-icon-button" onClick={() => { setSearchOpen(false); setSearchText(""); }} title="关闭搜索" aria-label="关闭搜索">
+								<Icon name="close" size={14} />
+							</button>
+						</div>
+					)}
 
 					<div className="omp-content">
 						<section className="omp-chat">
 							<div className="omp-messages" ref={scrollRef}>
-								{messages.length === 0 && (
+								{visibleMessages.length === 0 && (
 									<div className="omp-empty">
 										<div className="omp-empty-mark"><Icon name="spark" size={28} /></div>
 										<h2>把任务交给 omp</h2>
 										<p>它会在当前工作目录中读取文件、执行命令，并把过程展现在这里。</p>
-										<div className="omp-empty-hints">
-											<span>解释这段代码</span>
-											<span>修复测试失败</span>
-											<span>整理目录结构</span>
-										</div>
+									<div className="omp-empty-hints">
+										{["解释当前目录的代码结构", "帮我修复一个失败的测试", "梳理这个项目的待办事项"].map((hint) => (
+											<button key={hint} type="button" onClick={() => { setInput(hint); inputRef.current?.focus(); }}>
+												{hint}
+												<Icon name="chevron-right" size={12} />
+											</button>
+										))}
+									</div>
 									</div>
 								)}
 
-								{messages.map((message) => (
+								{visibleMessages.map((message) => (
 									<article key={message.id} className={`omp-message ${message.role}`}>
 										<div className="omp-message-avatar">
 											{message.role === "user" ? "你" : message.role === "agent" ? <Icon name="spark" size={13} /> : <Icon name="warning" size={13} />}
@@ -996,12 +1091,19 @@ export function App() {
 											<div className="omp-message-meta">
 												<span>{message.role === "user" ? "你" : message.role === "agent" ? "omp" : "系统"}</span>
 												<time>{new Date(message.ts).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</time>
+												{message.role === "user" && message.durationMs !== undefined && (
+													<span className="omp-duration"><Icon name="check" size={11} /> 已完成 {formatDuration(message.durationMs)}</span>
+												)}
 											</div>
 											<div className="omp-message-content">
 												{message.blocks.map((block, index) => (
-													<Block key={index} block={block} onOpenDoc={openDoc} />
+													<Block key={index} block={block} onOpenDoc={openDoc} query={searchText.trim()} />
 												))}
 											</div>
+											<MessageActions
+												text={message.blocks.map((block) => block.text).join("\n")}
+												onRetry={message.role === "user" ? () => retryMessage(message) : undefined}
+											/>
 										</div>
 									</article>
 								))}

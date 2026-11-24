@@ -373,11 +373,34 @@ summary:focus-visible {
   background: var(--surface-panel);
   border-bottom: 1px solid var(--border-subtle);
 }
-.omp-breadcrumb { display: flex; align-items: center; gap: var(--space-2); font-size: var(--font-md); color: var(--text-muted); }
-.omp-breadcrumb strong { color: var(--text-primary); font-weight: 600; }
-.omp-crumb-sep { color: var(--border-strong); }
-.omp-topbar-actions { display: flex; align-items: center; gap: var(--space-2); }
-.omp-topbar-status { color: var(--text-muted); font-size: var(--font-sm); max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.omp-topbar-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-lg); font-weight: 650; }
+.omp-topbar-actions { display: flex; align-items: center; gap: var(--space-1); }
+.omp-topbar-status { color: var(--text-muted); font-size: var(--font-sm); max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.omp-searchbar {
+  height: 42px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-subtle);
+}
+.omp-searchbar > svg { flex: none; color: var(--text-muted); }
+.omp-searchbar input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-input);
+  color: var(--text-primary);
+  font-size: var(--font-md);
+}
+.omp-search-count { flex: none; color: var(--text-muted); font-size: var(--font-sm); }
+mark { padding: 0 2px; border-radius: 3px; background: color-mix(in srgb, var(--warning) 38%, transparent); color: inherit; }
 
 .omp-content { flex: 1; display: flex; min-height: 0; }
 
@@ -417,14 +440,21 @@ summary:focus-visible {
 .omp-empty h2 { margin: 0; font-size: 21px; font-weight: 650; letter-spacing: 0.2px; }
 .omp-empty p { margin: 0; max-width: 440px; color: var(--text-secondary); font-size: var(--font-lg); }
 .omp-empty-hints { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-2); margin-top: var(--space-5); }
-.omp-empty-hints span {
-  padding: 6px 11px;
+.omp-empty-hints button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
   border: 1px solid var(--border-subtle);
   border-radius: 999px;
   background: var(--surface-panel);
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: var(--font-sm);
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
 }
+.omp-empty-hints button:hover { border-color: var(--accent-ring); background: var(--accent-soft); color: var(--accent); }
+.omp-empty-hints button svg { opacity: 0.6; }
 
 .omp-message {
   display: flex;
@@ -450,8 +480,38 @@ summary:focus-visible {
 .omp-message.system .omp-message-avatar { color: var(--danger); }
 .omp-message-body { flex: 1; min-width: 0; }
 .omp-message-meta { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
-.omp-message-meta span { font-size: var(--font-md); font-weight: 600; }
+.omp-message-meta > span:first-child { font-size: var(--font-md); font-weight: 600; }
 .omp-message-meta time { color: var(--text-muted); font-size: var(--font-xs); }
+.omp-duration {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+  font-weight: 400;
+}
+.omp-duration svg { color: var(--success); }
+.omp-message-actions { display: flex; gap: var(--space-1); margin-top: var(--space-2); }
+.omp-message-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, background 120ms ease, color 120ms ease;
+}
+.omp-message:hover .omp-message-actions button,
+.omp-message-actions button:focus-visible { opacity: 1; }
+.omp-message-actions button:hover { background: var(--surface-hover); color: var(--text-primary); }
 .omp-message-content {
   padding: var(--space-4);
   border: 1px solid var(--border-subtle);

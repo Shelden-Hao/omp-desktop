@@ -87,6 +87,7 @@ export interface ChatMessage {
 	role: Role;
 	blocks: ContentBlock[];
 	ts: number;
+	durationMs?: number;
 }
 
 export interface PermissionRequest {
