@@ -725,7 +725,7 @@ summary:focus-visible {
 .omp-search-up {
   transform: rotate(180deg);
 }
-.omp-searchbar + .omp-content .omp-messages {
+.omp-searchbar + .omp-messages {
   padding-top: 58px;
 }
 mark {
@@ -743,6 +743,7 @@ mark {
 
 /* ---------- 对话区 ---------- */
 .omp-chat {
+  position: relative;
   flex: 1;
   min-width: 0;
   display: flex;

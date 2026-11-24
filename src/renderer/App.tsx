@@ -1602,68 +1602,67 @@ export function App() {
 				</aside>
 
 				<main className="omp-main">
-					{searchOpen && (
-						<div className="omp-searchbar" role="search">
-							<Icon name="search" size={15} />
-							<input
-								ref={searchInputRef}
-								autoFocus
-								value={searchText}
-								onChange={(event) => {
-									setSearchText(event.target.value);
-									setSearchIndex(0);
-								}}
-								onKeyDown={(event) => {
-									if (event.key === "Enter") {
-										event.preventDefault();
-										jumpSearch(event.shiftKey ? -1 : 1);
-									}
-								}}
-								placeholder="搜索对话内容"
-								aria-label="搜索对话内容"
-							/>
-							{searchText && (
-								<span className="omp-search-count">
-									{visibleMessages.length ? searchIndex + 1 : 0}/{visibleMessages.length}
-								</span>
-							)}
-							<button
-								type="button"
-								className="omp-search-nav"
-								onClick={() => jumpSearch(-1)}
-								disabled={!visibleMessages.length}
-								title="上一处"
-								aria-label="上一处搜索结果"
-							>
-								<Icon name="chevron" size={13} className="omp-search-up" />
-							</button>
-							<button
-								type="button"
-								className="omp-search-nav"
-								onClick={() => jumpSearch(1)}
-								disabled={!visibleMessages.length}
-								title="下一处"
-								aria-label="下一处搜索结果"
-							>
-								<Icon name="chevron" size={13} />
-							</button>
-							<button
-								type="button"
-								className="omp-search-close"
-								onClick={() => {
-									setSearchOpen(false);
-									setSearchText("");
-								}}
-								title="关闭搜索"
-								aria-label="关闭搜索"
-							>
-								<Icon name="close" size={13} />
-							</button>
-						</div>
-					)}
-
 					<div className="omp-content">
 						<section className="omp-chat">
+							{searchOpen && (
+								<div className="omp-searchbar" role="search">
+									<Icon name="search" size={15} />
+									<input
+										ref={searchInputRef}
+										autoFocus
+										value={searchText}
+										onChange={(event) => {
+											setSearchText(event.target.value);
+											setSearchIndex(0);
+										}}
+										onKeyDown={(event) => {
+											if (event.key === "Enter") {
+												event.preventDefault();
+												jumpSearch(event.shiftKey ? -1 : 1);
+											}
+										}}
+										placeholder="搜索对话内容"
+										aria-label="搜索对话内容"
+									/>
+									{searchText && (
+										<span className="omp-search-count">
+											{visibleMessages.length ? searchIndex + 1 : 0}/{visibleMessages.length}
+										</span>
+									)}
+									<button
+										type="button"
+										className="omp-search-nav"
+										onClick={() => jumpSearch(-1)}
+										disabled={!visibleMessages.length}
+										title="上一处"
+										aria-label="上一处搜索结果"
+									>
+										<Icon name="chevron" size={13} className="omp-search-up" />
+									</button>
+									<button
+										type="button"
+										className="omp-search-nav"
+										onClick={() => jumpSearch(1)}
+										disabled={!visibleMessages.length}
+										title="下一处"
+										aria-label="下一处搜索结果"
+									>
+										<Icon name="chevron" size={13} />
+									</button>
+									<button
+										type="button"
+										className="omp-search-close"
+										onClick={() => {
+											setSearchOpen(false);
+											setSearchText("");
+										}}
+										title="关闭搜索"
+										aria-label="关闭搜索"
+									>
+										<Icon name="close" size={13} />
+									</button>
+								</div>
+							)}
 							<div className="omp-messages" ref={scrollRef}>
 								{visibleMessages.length === 0 && (
 									<div className="omp-empty">
