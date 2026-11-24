@@ -533,6 +533,30 @@ const TOOL_STATUS: Record<string, { label: string; icon: IconName }> = {
 	failed: { label: "失败", icon: "warning" },
 };
 
+const TOOL_KIND_LABEL: Record<string, string> = {
+	read: "读取文件",
+	edit: "编辑文件",
+	delete: "删除文件",
+	move: "移动文件",
+	search: "搜索",
+	execute: "运行命令",
+	think: "思考",
+	fetch: "获取内容",
+	switch_mode: "切换模式",
+	other: "工具调用",
+};
+
+function toolLabel(block: ContentBlock): string {
+	if (block.kind && TOOL_KIND_LABEL[block.kind]) return TOOL_KIND_LABEL[block.kind];
+	const name = (block.toolName || "").toLowerCase();
+	if (/bash|shell|exec|command|terminal/.test(name)) return "运行命令";
+	if (/read|cat|file/.test(name)) return "读取文件";
+	if (/write|edit|patch|apply/.test(name)) return "编辑文件";
+	if (/grep|glob|search|find/.test(name)) return "搜索";
+	if (/fetch|web|http/.test(name)) return "获取内容";
+	return block.toolName || "工具调用";
+}
+
 function Block({
 	block,
 	onOpenDoc,
@@ -574,29 +598,58 @@ function Block({
 
 	if (block.type === "tool_call") {
 		const status = TOOL_STATUS[block.status || "pending"];
+		const label = toolLabel(block);
 		const raw = block.raw as Record<string, unknown> | undefined;
-		const title = typeof raw?.title === "string" ? raw.title : "";
-		const hasResult =
-			block.status !== "pending" && block.text !== raw?.toolCallId && block.text.length > 0;
+		const legacyTitle = typeof raw?.title === "string" ? raw.title : "";
+		const title = block.title || legacyTitle;
+		const legacyResult =
+			!block.result && block.text && block.text !== raw?.toolCallId ? block.text : "";
+		const result = block.result || legacyResult;
+		const input = block.rawInput || "";
+		const hasDetail = Boolean(title || input || result);
 		return (
-			<div className={`omp-tool-card ${block.status || "pending"}`}>
-				<div className="omp-tool-main">
+			<details className={`omp-tool-card ${block.status || "pending"}`}>
+				<summary className="omp-tool-summary">
 					<span className="omp-tool-icon">
 						<Icon name={status.icon} size={14} />
 					</span>
-					<div className="omp-tool-copy">
-						<div className="omp-tool-title">{block.toolName}</div>
-						{title && <div className="omp-tool-subtitle">{title}</div>}
-					</div>
+					<span className="omp-tool-label">{label}</span>
+					{title && <span className="omp-tool-title-inline">{title}</span>}
 					<span className="omp-tool-status">{status.label}</span>
-				</div>
-				{hasResult && (
-					<details className="omp-tool-result">
-						<summary>查看结果</summary>
-						<pre>{block.text}</pre>
-					</details>
+					<svg
+						className="omp-fold-chevron"
+						viewBox="0 0 16 16"
+						width="13"
+						height="13"
+						aria-hidden="true"
+					>
+						<path
+							d="M4 6l4 4 4-4"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="1.5"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+						/>
+					</svg>
+				</summary>
+				{hasDetail && (
+					<div className="omp-tool-body">
+						{input && (
+							<div className="omp-tool-section">
+								<div className="omp-tool-section-label">输入</div>
+								<pre className="omp-tool-pre">{input}</pre>
+							</div>
+						)}
+						{result && (
+							<div className="omp-tool-section">
+								<div className="omp-tool-section-label">结果</div>
+								<pre className="omp-tool-pre">{result}</pre>
+							</div>
+						)}
+					</div>
 				)}
-			</div>
+			</details>
 		);
 	}
 
