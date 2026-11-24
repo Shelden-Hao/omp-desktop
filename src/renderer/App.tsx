@@ -114,8 +114,17 @@ function formatToolInput(raw: unknown): string {
 	}
 }
 
-function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
+function Icon({
+	name,
+	size = 16,
+	className,
+}: {
+	name: IconName;
+	size?: number;
+	className?: string;
+}) {
 	const common = {
+		className,
 		width: size,
 		height: size,
 		viewBox: "0 0 24 24",
@@ -1128,11 +1137,19 @@ export function App() {
 			]);
 		} finally {
 			if (cancelledSessionRef.current === sessionId) cancelledSessionRef.current = null;
-			updateMessages(sessionId, (prev) =>
-				prev.map((item) =>
-					item.id === userMessageId ? { ...item, durationMs: Date.now() - startedAt } : item,
-				),
-			);
+			updateMessages(sessionId, (prev) => {
+				const now = Date.now();
+				const copy = prev.map((item) =>
+					item.id === userMessageId ? { ...item, durationMs: now - startedAt } : item,
+				);
+				for (let i = copy.length - 1; i >= 0; i -= 1) {
+					if (copy[i].role === "agent") {
+						copy[i] = { ...copy[i], durationMs: now - copy[i].ts };
+						break;
+					}
+				}
+				return copy;
+			});
 			runningRef.current = false;
 			setRunning(false);
 			inputRef.current?.focus();
@@ -1614,9 +1631,18 @@ export function App() {
 									const hasPendingTool = message.blocks.some(
 										(block) => block.type === "tool_call" && block.status === "pending",
 									);
-									const generating =
+									const isActive = running && messageIndex === visibleMessages.length - 1;
+									const generating = message.role === "agent" && (isActive || hasPendingTool);
+									let splitAt = message.blocks.length;
+									while (splitAt > 0 && message.blocks[splitAt - 1].type === "text") splitAt -= 1;
+									const processBlocks = message.blocks.slice(0, splitAt);
+									const finalBlocks = message.blocks.slice(splitAt);
+									const hasProcessFold =
 										message.role === "agent" &&
-										((running && messageIndex === visibleMessages.length - 1) || hasPendingTool);
+										processBlocks.length > 0 &&
+										finalBlocks.length > 0 &&
+										!isActive;
+									const contentBlocks = hasProcessFold ? finalBlocks : message.blocks;
 									return (
 										<article key={message.id} className={`omp-message ${message.role}`}>
 											<div className="omp-message-avatar">
@@ -1650,22 +1676,49 @@ export function App() {
 														</span>
 													)}
 												</div>
-												{message.role === "agent" && (
-													<div className={`omp-agent-status ${generating ? "busy" : ""}`}>
-														<Icon name={generating ? "spark" : "check"} size={11} />
-														{generating ? "生成中" : "已完成"}
+												{message.role === "agent" &&
+													(hasProcessFold ? (
+														<details className="omp-process-fold">
+															<summary className="omp-agent-status">
+																<Icon name="check" size={11} />
+																<span>
+																	已完成
+																	{message.durationMs !== undefined
+																		? ` ${formatDuration(message.durationMs)}`
+																		: ""}
+																</span>
+																<span className="omp-process-hint">查看处理过程</span>
+																<Icon name="chevron" size={12} className="omp-fold-chevron" />
+															</summary>
+															<div className="omp-process-body">
+																{processBlocks.map((block, blockIndex) => (
+																	<Block
+																		key={blockIndex}
+																		block={block}
+																		onOpenDoc={openDoc}
+																		query={searchText.trim()}
+																	/>
+																))}
+															</div>
+														</details>
+													) : (
+														<div className={`omp-agent-status ${generating ? "busy" : ""}`}>
+															<Icon name={generating ? "spark" : "check"} size={11} />
+															{generating ? "生成中" : "已完成"}
+														</div>
+													))}
+												{contentBlocks.length > 0 && (
+													<div className="omp-message-content">
+														{contentBlocks.map((block, blockIndex) => (
+															<Block
+																key={blockIndex}
+																block={block}
+																onOpenDoc={openDoc}
+																query={searchText.trim()}
+															/>
+														))}
 													</div>
 												)}
-												<div className="omp-message-content">
-													{message.blocks.map((block, blockIndex) => (
-														<Block
-															key={blockIndex}
-															block={block}
-															onOpenDoc={openDoc}
-															query={searchText.trim()}
-														/>
-													))}
-												</div>
 												<MessageActions
 													text={message.blocks.map((block) => block.text).join("\n")}
 													onRetry={
