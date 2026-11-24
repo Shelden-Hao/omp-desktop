@@ -1,0 +1,14 @@
+# Normalize line endings on commit, checkout with platform-native endings
+* text=auto eol=lf
+
+# Explicit binary files (no diff / no normalization)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.exe binary
+*.dll binary
+*.node binary
+*.asar binary

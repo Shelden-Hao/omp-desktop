@@ -1,10 +1,49 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
 out/
+build/
+*.tsbuildinfo
+
+# Electron packaging artifacts
+*.exe
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+*.snap
+*.blockmap
+*.asar
+builder-effective-config.yaml
+
+# Logs
 *.log
-.DS_Store
-.vscode/
-.idea/
-*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment & local config
 .env
 .env.*
+*.local
+
+# Coverage & caches
+coverage/
+.nyc_output/
+.cache/
+*.lcov
+
+# Editor & OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Runtime data (omp-desktop user settings live in userData, not here)
+bun/
+*.pid
