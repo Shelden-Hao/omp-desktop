@@ -707,11 +707,13 @@ export function App() {
 	const [sidebarView, setSidebarView] = useState<SidebarView>("recent");
 	const [searchOpen, setSearchOpen] = useState(false);
 	const [searchText, setSearchText] = useState("");
+	const [searchIndex, setSearchIndex] = useState(0);
 	const [sessionStates, setSessionStates] = useState<Record<string, SessionState>>({});
 	const [modelMenuOpen, setModelMenuOpen] = useState(false);
 
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const inputRef = useRef<HTMLTextAreaElement>(null);
+	const searchInputRef = useRef<HTMLInputElement>(null);
 	const toolIndex = useRef<Map<string, number>>(new Map());
 	const activeIdRef = useRef<string | null>(null);
 	const loadedSessions = useRef<Set<string>>(new Set());
@@ -729,9 +731,38 @@ export function App() {
 		: messages;
 	const currentDoc = docs.find((doc) => doc.key === activeDoc);
 
+	const jumpSearch = (delta: number) => {
+		if (!visibleMessages.length) return;
+		const next = (searchIndex + delta + visibleMessages.length) % visibleMessages.length;
+		setSearchIndex(next);
+		requestAnimationFrame(() => {
+			document
+				.querySelector(`[data-message-id="${visibleMessages[next].id}"]`)
+				?.scrollIntoView({ block: "center", behavior: "smooth" });
+		});
+	};
+
 	useEffect(() => {
 		activeIdRef.current = activeId;
 	}, [activeId]);
+
+	useEffect(() => {
+		const onKeyDown = (event: KeyboardEvent) => {
+			if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
+				event.preventDefault();
+				setSearchOpen(true);
+				requestAnimationFrame(() => {
+					searchInputRef.current?.focus();
+					searchInputRef.current?.select();
+				});
+			} else if (event.key === "Escape" && searchOpen) {
+				setSearchOpen(false);
+				setSearchText("");
+			}
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [searchOpen]);
 
 	useEffect(() => {
 		pendingPermissionRef.current = permission;
@@ -1275,16 +1306,6 @@ export function App() {
 		}
 	};
 
-	const changeTheme = async (theme: ThemeMode) => {
-		const next = { ...settings, theme };
-		setSettings(next);
-		try {
-			await window.desktop.settings.set({ theme });
-		} catch (error) {
-			setStatus(`主题保存失败：${(error as Error).message}`);
-		}
-	};
-
 	const saveSettings = async () => {
 		try {
 			await window.desktop.settings.set(settings);
@@ -1400,35 +1421,22 @@ export function App() {
 					</span>
 				</div>
 				<div className="omp-titlebar-right">
-					<div className="omp-theme-switch" role="group" aria-label="主题模式">
-						{(["light", "dark", "system"] as ThemeMode[]).map((mode) => (
-							<button
-								key={mode}
-								type="button"
-								className={settings.theme === mode ? "active" : ""}
-								onClick={() => changeTheme(mode)}
-								title={THEME_LABEL[mode]}
-								aria-label={THEME_LABEL[mode]}
-							>
-								<Icon
-									name={mode === "light" ? "sun" : mode === "dark" ? "moon" : "monitor"}
-									size={12}
-								/>
-							</button>
-						))}
-					</div>
-					<button
-						type="button"
-						className={`omp-title-action ${searchOpen ? "active" : ""}`}
-						onClick={() => {
-							setSearchOpen((value) => !value);
-							if (searchOpen) setSearchText("");
-						}}
-						title="搜索当前会话"
-						aria-label="搜索当前会话"
-					>
-						<Icon name="search" size={14} />
-					</button>
+					<span className="omp-title-tip">
+						<button
+							type="button"
+							className={`omp-title-action ${searchOpen ? "active" : ""}`}
+							onClick={() => {
+								setSearchOpen((value) => !value);
+								if (searchOpen) setSearchText("");
+							}}
+							aria-label="对话内搜索，快捷键 Ctrl+F"
+						>
+							<Icon name="search" size={14} />
+						</button>
+						<span className="omp-tooltip" role="tooltip">
+							对话内搜索 <kbd>Ctrl+F</kbd>
+						</span>
+					</span>
 					<button
 						type="button"
 						className={`omp-title-action ${showPreview ? "active" : ""}`}
@@ -1437,15 +1445,6 @@ export function App() {
 						aria-label="切换文件预览"
 					>
 						<Icon name="panel" size={14} />
-					</button>
-					<button
-						type="button"
-						className="omp-title-action"
-						onClick={() => setShowSettings(true)}
-						title="设置"
-						aria-label="设置"
-					>
-						<Icon name="settings" size={14} />
 					</button>
 					<span className="omp-title-divider" />
 					<div className="omp-window-controls">
@@ -1604,28 +1603,53 @@ export function App() {
 
 				<main className="omp-main">
 					{searchOpen && (
-						<div className="omp-searchbar">
-							<Icon name="search" size={14} />
+						<div className="omp-searchbar" role="search">
+							<Icon name="search" size={15} />
 							<input
+								ref={searchInputRef}
 								autoFocus
 								value={searchText}
-								onChange={(event) => setSearchText(event.target.value)}
-								placeholder="在当前会话中搜索…"
-								aria-label="搜索当前会话消息"
+								onChange={(event) => {
+									setSearchText(event.target.value);
+									setSearchIndex(0);
+								}}
+								onKeyDown={(event) => {
+									if (event.key === "Enter") {
+										event.preventDefault();
+										jumpSearch(event.shiftKey ? -1 : 1);
+									}
+								}}
+								placeholder="搜索对话内容"
+								aria-label="搜索对话内容"
 							/>
 							{searchText && (
 								<span className="omp-search-count">
-									{
-										messages.filter((m) =>
-											m.blocks.some((b) => b.text.toLowerCase().includes(searchText.toLowerCase())),
-										).length
-									}{" "}
-									条结果
+									{visibleMessages.length ? searchIndex + 1 : 0}/{visibleMessages.length}
 								</span>
 							)}
 							<button
 								type="button"
-								className="omp-icon-button"
+								className="omp-search-nav"
+								onClick={() => jumpSearch(-1)}
+								disabled={!visibleMessages.length}
+								title="上一处"
+								aria-label="上一处搜索结果"
+							>
+								<Icon name="chevron" size={13} className="omp-search-up" />
+							</button>
+							<button
+								type="button"
+								className="omp-search-nav"
+								onClick={() => jumpSearch(1)}
+								disabled={!visibleMessages.length}
+								title="下一处"
+								aria-label="下一处搜索结果"
+							>
+								<Icon name="chevron" size={13} />
+							</button>
+							<button
+								type="button"
+								className="omp-search-close"
 								onClick={() => {
 									setSearchOpen(false);
 									setSearchText("");
@@ -1633,7 +1657,7 @@ export function App() {
 								title="关闭搜索"
 								aria-label="关闭搜索"
 							>
-								<Icon name="close" size={14} />
+								<Icon name="close" size={13} />
 							</button>
 						</div>
 					)}
@@ -1687,7 +1711,11 @@ export function App() {
 										!isActive;
 									const contentBlocks = hasProcessFold ? finalBlocks : message.blocks;
 									return (
-										<article key={message.id} className={`omp-message ${message.role}`}>
+										<article
+											key={message.id}
+											className={`omp-message ${message.role}`}
+											data-message-id={message.id}
+										>
 											<div className="omp-message-avatar">
 												{message.role === "user" ? (
 													"你"
