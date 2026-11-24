@@ -24,6 +24,7 @@ interface TextDocument {
 }
 
 const SETTINGS_PATH = join(app.getPath("userData"), "settings.json");
+const SESSIONS_PATH = join(app.getPath("userData"), "sessions.json");
 const MAX_PREVIEW_BYTES = 2 * 1024 * 1024;
 
 const LANGUAGE_BY_EXTENSION: Record<string, string> = {
@@ -348,6 +349,36 @@ function saveSettings(next: AppSettings) {
 	writeFileSync(SETTINGS_PATH, JSON.stringify(next, null, 2), "utf8");
 }
 
+interface StoredSession {
+	id: string;
+	title: string;
+	cwd: string;
+}
+
+function loadSessions(): StoredSession[] {
+	try {
+		if (!existsSync(SESSIONS_PATH)) return [];
+		const parsed: unknown = JSON.parse(readFileSync(SESSIONS_PATH, "utf8"));
+		if (!Array.isArray(parsed)) return [];
+		return parsed
+			.filter((item): item is StoredSession =>
+				Boolean(item) &&
+				typeof item === "object" &&
+				typeof item.id === "string" &&
+				typeof item.title === "string" &&
+				typeof item.cwd === "string",
+			)
+			.map((item) => ({ id: item.id, title: item.title, cwd: item.cwd }));
+	} catch {
+		return [];
+	}
+}
+
+function saveSessions(next: StoredSession[]) {
+	mkdirSync(dirname(SESSIONS_PATH), { recursive: true });
+	writeFileSync(SESSIONS_PATH, JSON.stringify(next, null, 2), "utf8");
+}
+
 // ---------------------------------------------------------------------------
 // ACP 子进程：spawn omp acp，stdin/stdout 走 NDJSON JSON-RPC
 // ---------------------------------------------------------------------------
@@ -461,6 +492,12 @@ app.whenReady().then(() => {
 		saveSettings(settings);
 		return settings;
 	});
+	ipcMain.handle("sessions:get", () => loadSessions());
+	ipcMain.handle("sessions:set", (_e, next: StoredSession[]) => {
+		saveSessions(next);
+		return next;
+	});
+
 	ipcMain.handle("file:open", async () => {
 		const result = await dialog.showOpenDialog({
 			title: "选择要预览的文件",

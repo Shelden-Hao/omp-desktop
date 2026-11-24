@@ -13,6 +13,12 @@ export interface DesktopSettings {
 	theme: ThemeMode;
 }
 
+export interface StoredSession {
+	id: string;
+	title: string;
+	cwd: string;
+}
+
 export interface OpenedFile {
 	path: string;
 	name: string;
@@ -36,6 +42,10 @@ export interface AcpBridge {
 	settings: {
 		get(): Promise<DesktopSettings>;
 		set(next: Partial<DesktopSettings>): Promise<DesktopSettings>;
+	};
+	sessions: {
+		get(): Promise<StoredSession[]>;
+		set(next: StoredSession[]): Promise<StoredSession[]>;
 	};
 	files: {
 		open(): Promise<OpenedFile | null>;

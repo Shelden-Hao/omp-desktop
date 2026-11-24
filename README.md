@@ -83,7 +83,8 @@ env -u ELECTRON_RUN_AS_NODE npm start
 - [x] 本地文件预览与文件引用
 - [x] ACP fs 读写回调（限制在工作目录内）
 - [x] ACP terminal 回调（进程、输出、退出、终止）
-- [ ] 会话历史持久化与恢复
+- [x] 会话列表持久化与 ACP 会话恢复
+- [x] 运行中取消与权限请求取消
 - [ ] Windows 安装包打包
 
 ## License

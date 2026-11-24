@@ -1,10 +1,14 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { DesktopSettings, OpenedFile, ToolResult } from "../renderer/acp-client";
+import type { DesktopSettings, OpenedFile, StoredSession, ToolResult } from "../renderer/acp-client";
 
 export interface DesktopBridge {
 	settings: {
 		get(): Promise<DesktopSettings>;
 		set(next: Partial<DesktopSettings>): Promise<DesktopSettings>;
+	};
+	sessions: {
+		get(): Promise<StoredSession[]>;
+		set(next: StoredSession[]): Promise<StoredSession[]>;
 	};
 	files: {
 		open(): Promise<OpenedFile | null>;
@@ -34,6 +38,10 @@ const bridge: DesktopBridge = {
 	settings: {
 		get: () => ipcRenderer.invoke("settings:get"),
 		set: (next) => ipcRenderer.invoke("settings:set", next),
+	},
+	sessions: {
+		get: () => ipcRenderer.invoke("sessions:get"),
+		set: (next) => ipcRenderer.invoke("sessions:set", next),
 	},
 	files: {
 		open: () => ipcRenderer.invoke("file:open"),

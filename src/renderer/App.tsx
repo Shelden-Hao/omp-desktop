@@ -12,6 +12,7 @@ import { DEFAULT_DOCS, type DocFile } from "./docs";
 interface Session {
 	id: string;
 	title: string;
+	cwd?: string;
 }
 
 interface PermissionState {
@@ -343,6 +344,9 @@ export function App() {
 	const inputRef = useRef<HTMLTextAreaElement>(null);
 	const toolIndex = useRef<Map<string, number>>(new Map());
 	const activeIdRef = useRef<string | null>(null);
+	const loadedSessions = useRef<Set<string>>(new Set());
+	const pendingPermissionRef = useRef<PermissionState | null>(null);
+	const cancelledSessionRef = useRef<string | null>(null);
 
 	const messages = activeId ? messagesBySession[activeId] || [] : [];
 	const currentDoc = docs.find((doc) => doc.key === activeDoc);
@@ -350,6 +354,10 @@ export function App() {
 	useEffect(() => {
 		activeIdRef.current = activeId;
 	}, [activeId]);
+
+	useEffect(() => {
+		pendingPermissionRef.current = permission;
+	}, [permission]);
 
 	useEffect(() => {
 		const root = document.documentElement;
@@ -410,6 +418,28 @@ export function App() {
 		},
 		[updateMessages],
 	);
+
+	const persistSessions = useCallback(async (next: Session[]) => {
+		try {
+			const loaded = await window.desktop.settings.get();
+			await window.desktop.sessions.set(
+				next.map((session) => ({ id: session.id, title: session.title, cwd: session.cwd || loaded.cwd })),
+			);
+		} catch (error) {
+			setStatus(`会话保存失败：${(error as Error).message}`);
+		}
+	}, []);
+
+	const loadSessionHistory = useCallback(async (acp: AcpClient, sessionId: string, cwd: string) => {
+		if (loadedSessions.current.has(sessionId)) return;
+		loadedSessions.current.add(sessionId);
+		setMessagesBySession((prev) => ({ ...prev, [sessionId]: [] }));
+		try {
+			await acp.loadSession(sessionId, cwd);
+		} catch (error) {
+			setStatus(`恢复会话失败：${(error as Error).message}`);
+		}
+	}, []);
 
 	const handleEvent = useCallback(
 		(event: AcpEvent) => {
@@ -532,18 +562,48 @@ export function App() {
 			try {
 				await acp.initialize();
 				const loaded = await bridge.settings.get();
-				const session = await acp.newSession(loaded.cwd);
-				setSessions([{ id: session.sessionId, title: "会话 1" }]);
-				setActiveId(session.sessionId);
+				const stored = await bridge.sessions.get();
+				let list: Session[] = stored.map((session) => ({
+					id: session.id,
+					title: session.title,
+					cwd: session.cwd || loaded.cwd,
+				}));
+
+				try {
+					const remote = await acp.listSessions();
+					for (const session of remote.sessions || []) {
+						if (!list.some((item) => item.id === session.sessionId)) {
+							list.push({
+								id: session.sessionId,
+								title: session.title || `会话 ${list.length + 1}`,
+								cwd: session.cwd || loaded.cwd,
+							});
+						}
+					}
+				} catch {
+					// 某些 omp 版本没有 session/list，忽略即可。
+				}
+
+				if (list.length === 0) {
+					const session = await acp.newSession(loaded.cwd);
+					list = [{ id: session.sessionId, title: "会话 1", cwd: loaded.cwd }];
+					loadedSessions.current.add(session.sessionId);
+				}
+
+				setSessions(list);
+				void persistSessions(list);
+				const first = list[0];
+				setActiveId(first.id);
 				setConnected(true);
 				setStatus("已连接");
+				await loadSessionHistory(acp, first.id, first.cwd || loaded.cwd);
 			} catch (error) {
 				setStatus(`握手失败：${(error as Error).message}`);
 			}
 		})();
 
 		return () => acp.stop();
-	}, [handleEvent]);
+	}, [handleEvent, loadSessionHistory, persistSessions]);
 
 	useEffect(() => {
 		scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -552,16 +612,21 @@ export function App() {
 	const send = async () => {
 		const text = input.trim();
 		if (!client || !activeId || !text || running) return;
+		const sessionId = activeId;
 		setInput("");
-		updateMessages(activeId, (prev) => [
+		updateMessages(sessionId, (prev) => [
 			...prev,
 			{ id: uid(), role: "user", blocks: [{ type: "text", text }], ts: Date.now() },
 		]);
 		setRunning(true);
 		try {
-			await client.prompt(activeId, text);
+			await client.prompt(sessionId, text);
 		} catch (error) {
-			updateMessages(activeId, (prev) => [
+			if (cancelledSessionRef.current === sessionId) {
+				cancelledSessionRef.current = null;
+				return;
+			}
+			updateMessages(sessionId, (prev) => [
 				...prev,
 				{
 					id: uid(),
@@ -571,13 +636,31 @@ export function App() {
 				},
 			]);
 		} finally {
+			if (cancelledSessionRef.current === sessionId) cancelledSessionRef.current = null;
 			setRunning(false);
 			inputRef.current?.focus();
 		}
 	};
 
 	const cancel = () => {
-		if (client && activeId) client.cancel(activeId);
+		if (!client || !activeId) return;
+		cancelledSessionRef.current = activeId;
+		client.cancel(activeId);
+		const pending = pendingPermissionRef.current;
+		if (pending?.sessionId === activeId) {
+			pending.respond({ outcome: { outcome: "cancelled" } });
+			setPermission(null);
+		}
+		setRunning(false);
+	};
+
+	const selectSession = async (session: Session) => {
+		setActiveId(session.id);
+		setRunning(false);
+		if (client && !loadedSessions.current.has(session.id)) {
+			const loaded = await window.desktop.settings.get();
+			await loadSessionHistory(client, session.id, session.cwd || loaded.cwd);
+		}
 	};
 
 	const newSession = async () => {
@@ -585,7 +668,13 @@ export function App() {
 		try {
 			const loaded = await window.desktop.settings.get();
 			const session = await client.newSession(loaded.cwd);
-			setSessions((prev) => [...prev, { id: session.sessionId, title: `会话 ${prev.length + 1}` }]);
+			const next: Session[] = [
+				...sessions,
+				{ id: session.sessionId, title: `会话 ${sessions.length + 1}`, cwd: loaded.cwd },
+			];
+			loadedSessions.current.add(session.sessionId);
+			setSessions(next);
+			void persistSessions(next);
 			setActiveId(session.sessionId);
 			setRunning(false);
 		} catch (error) {
@@ -721,7 +810,7 @@ export function App() {
 									key={session.id}
 									type="button"
 									className={`omp-session ${session.id === activeId ? "active" : ""}`}
-									onClick={() => setActiveId(session.id)}
+									onClick={() => void selectSession(session)}
 									title={session.id}
 								>
 									<Icon name="file" size={14} />
