@@ -80,7 +80,8 @@ env -u ELECTRON_RUN_AS_NODE npm start
 - [x] ACP 握手 / 新建会话 / prompt 发送 / 取消
 - [x] 浅色 / 深色 / 跟随系统三档主题
 - [x] 工具调用卡片 / 权限确认 / 思考过程展示
-- [ ] 本地文件预览与 ACP fs 回调
+- [x] 本地文件预览与文件引用
+- [ ] ACP fs 读写回调
 - [ ] ACP terminal 回调
 - [ ] 会话历史持久化与恢复
 - [ ] Windows 安装包打包

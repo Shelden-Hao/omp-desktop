@@ -34,6 +34,7 @@ type IconName =
 	| "stop"
 	| "chevron"
 	| "panel"
+	| "refresh"
 	| "copy"
 	| "check"
 	| "spark"
@@ -104,6 +105,8 @@ function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
 			return <svg {...common}><path d="m6 9 6 6 6-6" /></svg>;
 		case "panel":
 			return <svg {...common}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M15 4v16" /></svg>;
+		case "refresh":
+			return <svg {...common}><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5" /></svg>;
 		case "copy":
 			return <svg {...common}><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></svg>;
 		case "check":
@@ -342,6 +345,7 @@ export function App() {
 	const activeIdRef = useRef<string | null>(null);
 
 	const messages = activeId ? messagesBySession[activeId] || [] : [];
+	const currentDoc = docs.find((doc) => doc.key === activeDoc);
 
 	useEffect(() => {
 		activeIdRef.current = activeId;
@@ -579,22 +583,61 @@ export function App() {
 		}
 	};
 
-	const openDoc = (name: string, content: string) => {
-		setDocs((prev) => (prev.some((doc) => doc.name === name) ? prev : [...prev, { name, content }]));
-		setActiveDoc(name);
+	const openDoc = (name: string, content: string, path?: string, language?: string) => {
+		const key = path || `snippet:${uid()}`;
+		setDocs((prev) => [
+			...prev.filter((doc) => doc.key !== key),
+			{ key, name, content, path, language },
+		]);
+		setActiveDoc(key);
 		setShowPreview(true);
 	};
 
-	const closeDoc = (name: string) => {
+	const openLocalFile = async () => {
+		try {
+			const file = await window.desktop.files.open();
+			if (!file) return;
+			openDoc(file.name, file.content, file.path, file.language);
+		} catch (error) {
+			setStatus(`打开文件失败：${(error as Error).message}`);
+		}
+	};
+
+	const insertFileReference = async () => {
+		try {
+			const file = await window.desktop.files.open();
+			if (!file) return;
+			const reference = file.path.includes(" ") ? `@"${file.path}"` : `@${file.path}`;
+			setInput((prev) => `${prev}${prev && !prev.endsWith(" ") ? " " : ""}${reference} `);
+			inputRef.current?.focus();
+		} catch (error) {
+			setStatus(`引用文件失败：${(error as Error).message}`);
+		}
+	};
+
+	const reloadDoc = async () => {
+		if (!currentDoc?.path) return;
+		try {
+			const file = await window.desktop.files.read(currentDoc.path);
+			setDocs((prev) =>
+				prev.map((doc) =>
+					doc.key === currentDoc.key ? { ...doc, content: file.content, language: file.language } : doc,
+				),
+			);
+		} catch (error) {
+			setStatus(`刷新文件失败：${(error as Error).message}`);
+		}
+	};
+
+	const closeDoc = (key: string) => {
 		setDocs((prev) => {
-			const next = prev.filter((doc) => doc.name !== name);
-			if (activeDoc === name) setActiveDoc(next[0]?.name || null);
+			const next = prev.filter((doc) => doc.key !== key);
+			if (activeDoc === key) setActiveDoc(next[0]?.key || null);
 			return next;
 		});
 	};
 
 	const activeTitle = sessions.find((session) => session.id === activeId)?.title || "新会话";
-	const currentDoc = docs.find((doc) => doc.name === activeDoc);
 
 	return (
 		<div className="omp-app">
@@ -752,7 +795,10 @@ export function App() {
 									/>
 									<div className="omp-composer-footer">
 										<div className="omp-composer-hint">
-											<Icon name="folder" size={13} />
+											<button type="button" className="omp-reference" onClick={insertFileReference} title="选择文件并插入引用">
+												<Icon name="folder" size={13} />
+												引用文件
+											</button>
 											<span title={settings.cwd}>{shortPath(settings.cwd)}</span>
 											<span className="omp-hint-sep">·</span>
 											<span>Enter 发送，Shift + Enter 换行</span>
@@ -778,19 +824,34 @@ export function App() {
 									<div>
 										<Icon name="file" size={14} />
 										<span>文件预览</span>
+										{currentDoc && (
+											<span className="omp-preview-current" title={currentDoc.path || currentDoc.name}>
+												· {currentDoc.name}
+											</span>
+										)}
 									</div>
-									<button type="button" className="omp-icon-button" onClick={() => setShowPreview(false)} title="关闭预览" aria-label="关闭预览">
-										<Icon name="close" size={14} />
-									</button>
+									<div className="omp-preview-actions">
+										<button type="button" className="omp-icon-button" onClick={openLocalFile} title="打开文件" aria-label="打开文件">
+											<Icon name="folder" size={14} />
+										</button>
+										{currentDoc?.path && (
+											<button type="button" className="omp-icon-button" onClick={reloadDoc} title="重新读取文件" aria-label="重新读取文件">
+												<Icon name="refresh" size={14} />
+											</button>
+										)}
+										<button type="button" className="omp-icon-button" onClick={() => setShowPreview(false)} title="关闭预览" aria-label="关闭预览">
+											<Icon name="close" size={14} />
+										</button>
+									</div>
 								</div>
 								<div className="omp-file-tabs">
 									{docs.map((doc) => (
-										<div key={doc.name} className={`omp-file-tab ${activeDoc === doc.name ? "active" : ""}`}>
-											<button type="button" onClick={() => setActiveDoc(doc.name)} title={doc.name}>
+										<div key={doc.key} className={`omp-file-tab ${activeDoc === doc.key ? "active" : ""}`}>
+											<button type="button" onClick={() => setActiveDoc(doc.key)} title={doc.path || doc.name}>
 												<Icon name="file" size={12} />
 												<span>{doc.name}</span>
 											</button>
-											<button type="button" className="omp-tab-close" onClick={() => closeDoc(doc.name)} title="关闭" aria-label={`关闭 ${doc.name}`}>
+											<button type="button" className="omp-tab-close" onClick={() => closeDoc(doc.key)} title="关闭" aria-label={`关闭 ${doc.name}`}>
 												<Icon name="close" size={11} />
 											</button>
 										</div>
@@ -803,7 +864,11 @@ export function App() {
 										<div className="omp-preview-empty">
 											<Icon name="file" size={24} />
 											<p>暂无预览文件</p>
-											<span>双击回复中的代码块可在此打开</span>
+											<span>打开文件，或在回复中打开代码块</span>
+											<button type="button" className="omp-preview-open" onClick={openLocalFile}>
+												<Icon name="folder" size={13} />
+												选择文件
+											</button>
 										</div>
 									)}
 								</div>

@@ -13,6 +13,13 @@ export interface DesktopSettings {
 	theme: ThemeMode;
 }
 
+export interface OpenedFile {
+	path: string;
+	name: string;
+	content: string;
+	language: string;
+}
+
 export interface AcpBridge {
 	agent: {
 		start(): Promise<{ ok: boolean; error?: string }>;
@@ -23,6 +30,10 @@ export interface AcpBridge {
 	settings: {
 		get(): Promise<DesktopSettings>;
 		set(next: Partial<DesktopSettings>): Promise<DesktopSettings>;
+	};
+	files: {
+		open(): Promise<OpenedFile | null>;
+		read(path: string): Promise<OpenedFile>;
 	};
 	onFrame(cb: (line: string) => void): () => void;
 	onStderr(cb: (text: string) => void): () => void;
