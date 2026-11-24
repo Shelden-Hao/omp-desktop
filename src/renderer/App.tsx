@@ -20,6 +20,26 @@ interface Session {
 
 type SidebarView = "recent" | "grouped";
 
+/** 任务状态筛选。状态由本地会话数据推导，omp 本身不返回任务状态。 */
+type StatusFilter = "all" | "running" | "done" | "failed" | "pending" | "planned";
+type TimeFilter = "all" | "today" | "week" | "month";
+
+const STATUS_FILTERS: Array<{ value: StatusFilter; label: string }> = [
+	{ value: "all", label: "全部状态" },
+	{ value: "running", label: "进行中" },
+	{ value: "done", label: "已完成" },
+	{ value: "failed", label: "失败" },
+	{ value: "pending", label: "待处理" },
+	{ value: "planned", label: "规划中" },
+];
+
+const TIME_FILTERS: Array<{ value: TimeFilter; label: string }> = [
+	{ value: "all", label: "全部时间" },
+	{ value: "today", label: "今天" },
+	{ value: "week", label: "最近 7 天" },
+	{ value: "month", label: "最近 30 天" },
+];
+
 interface PermissionState {
 	sessionId: string;
 	title: string;
@@ -54,7 +74,9 @@ type IconName =
 	| "more"
 	| "rotate"
 	| "minimize"
-	| "maximize";
+	| "maximize"
+	| "sidebar"
+	| "filter";
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -224,6 +246,20 @@ function Icon({
 				<svg {...common}>
 					<rect x="3" y="4" width="18" height="16" rx="2" />
 					<path d="M15 4v16" />
+				</svg>
+			);
+		case "sidebar":
+			return (
+				<svg {...common}>
+					<rect x="3" y="4" width="18" height="16" rx="4.5" />
+					<path d="M9.5 5.2v13.6" />
+					<path d="M4.6 5.2h4.4v13.6H4.6z" fill="currentColor" stroke="none" opacity="0.5" />
+				</svg>
+			);
+		case "filter":
+			return (
+				<svg {...common}>
+					<path d="M4 5h16l-6 7.6V19l-4-2.4v-4L4 5Z" />
 				</svg>
 			);
 		case "refresh":
@@ -711,6 +747,10 @@ export function App() {
 	const [activeDoc, setActiveDoc] = useState<string | null>(null);
 	const [showPreview, setShowPreview] = useState(true);
 	const [sidebarView, setSidebarView] = useState<SidebarView>("recent");
+	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+	const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+	const [timeFilter, setTimeFilter] = useState<TimeFilter>("all");
+	const [filterOpen, setFilterOpen] = useState(false);
 	const [searchOpen, setSearchOpen] = useState(false);
 	const [searchText, setSearchText] = useState("");
 	const [searchIndex, setSearchIndex] = useState(0);
@@ -722,6 +762,7 @@ export function App() {
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const inputRef = useRef<HTMLTextAreaElement>(null);
 	const searchInputRef = useRef<HTMLInputElement>(null);
+	const filterRef = useRef<HTMLSpanElement>(null);
 	const toolIndex = useRef<Map<string, number>>(new Map());
 	const activeIdRef = useRef<string | null>(null);
 	const loadedSessions = useRef<Set<string>>(new Set());
@@ -736,6 +777,55 @@ export function App() {
 	);
 	const visibleMessages = messages;
 	const currentDoc = docs.find((doc) => doc.key === activeDoc);
+	const filtersActive = statusFilter !== "all" || timeFilter !== "all";
+
+	// omp 不返回任务状态，这里按本地会话数据推导，避免展示没有依据的状态
+	const filteredSessions = useMemo(() => {
+		const now = Date.now();
+		const startOfToday = new Date(now);
+		startOfToday.setHours(0, 0, 0, 0);
+
+		const matchTime = (ts?: number) => {
+			if (timeFilter === "all") return true;
+			if (!ts) return false;
+			if (timeFilter === "today") return ts >= startOfToday.getTime();
+			if (timeFilter === "week") return ts >= now - 7 * 86_400_000;
+			return ts >= now - 30 * 86_400_000;
+		};
+
+		const statusOf = (session: Session): StatusFilter => {
+			if (running && session.id === activeId) return "running";
+			const list = messagesBySession[session.id];
+			// 未打开过的历史会话没有本地缓存，按已完成处理
+			if (!list) return "done";
+			if (!list.length) return "planned";
+			const last = list[list.length - 1];
+			if (last.role === "system") return "failed";
+			if (last.role === "user") return "pending";
+			return "done";
+		};
+
+		return sessions.filter(
+			(session) =>
+				matchTime(session.ts) && (statusFilter === "all" || statusOf(session) === statusFilter),
+		);
+	}, [sessions, statusFilter, timeFilter, messagesBySession, running, activeId]);
+
+	useEffect(() => {
+		if (!filterOpen) return;
+		const onPointerDown = (event: MouseEvent) => {
+			if (!filterRef.current?.contains(event.target as Node)) setFilterOpen(false);
+		};
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") setFilterOpen(false);
+		};
+		document.addEventListener("mousedown", onPointerDown);
+		document.addEventListener("keydown", onKeyDown);
+		return () => {
+			document.removeEventListener("mousedown", onPointerDown);
+			document.removeEventListener("keydown", onKeyDown);
+		};
+	}, [filterOpen]);
 
 	const updateAtBottom = () => {
 		const el = scrollRef.current;
@@ -1295,6 +1385,8 @@ export function App() {
 			}));
 			setSessions(next);
 			void persistSessions(next);
+			// 空会话在筛选里算「规划中」，所以显式登记空消息列表
+			setMessagesBySession((prev) => ({ ...prev, [session.sessionId]: [] }));
 			setActiveId(session.sessionId);
 			setRunning(false);
 		} catch (error) {
@@ -1440,29 +1532,99 @@ export function App() {
 		<div className="omp-app">
 			<header className="omp-titlebar">
 				<div className="omp-titlebar-left">
-					<span className="omp-logo">
-						<Icon name="spark" size={12} />
+					<span className="omp-title-tip">
+						<button
+							type="button"
+							className={`omp-title-action ${sidebarCollapsed ? "active" : ""}`}
+							onClick={() => setSidebarCollapsed((value) => !value)}
+							aria-label="切换侧栏"
+						>
+							<Icon name="sidebar" size={14} />
+						</button>
+						<span className="omp-tooltip" role="tooltip">
+							{sidebarCollapsed ? "显示侧栏" : "收起侧栏"}
+						</span>
 					</span>
-					<button
-						type="button"
-						className="omp-title-action"
-						onClick={newSession}
-						disabled={!connected}
-						title="新建任务"
-						aria-label="新建任务"
-					>
-						<Icon name="plus" size={14} />
-					</button>
+					<span className="omp-title-tip omp-filter-wrap" ref={filterRef}>
+						<button
+							type="button"
+							className={`omp-title-action ${filterOpen ? "active" : ""} ${filtersActive ? "filtered" : ""}`}
+							onClick={() => setFilterOpen((value) => !value)}
+							aria-label="筛选任务状态"
+							aria-haspopup="menu"
+							aria-expanded={filterOpen}
+						>
+							<Icon name="filter" size={14} />
+							{filtersActive && <span className="omp-filter-dot" />}
+						</button>
+						<span className="omp-tooltip" role="tooltip">
+							筛选任务状态
+						</span>
+						{filterOpen && (
+							<div className="omp-filter-menu" role="menu">
+								<div className="omp-filter-group">
+									<span className="omp-filter-label">筛选状态</span>
+									{STATUS_FILTERS.map((item) => (
+										<button
+											key={item.value}
+											type="button"
+											role="menuitemradio"
+											aria-checked={statusFilter === item.value}
+											className={`omp-filter-item ${statusFilter === item.value ? "active" : ""}`}
+											onClick={() => {
+												setStatusFilter(item.value);
+												setFilterOpen(false);
+											}}
+										>
+											<span>{item.label}</span>
+											{statusFilter === item.value && <Icon name="check" size={14} />}
+										</button>
+									))}
+								</div>
+								<div className="omp-filter-group">
+									<span className="omp-filter-label">筛选时间</span>
+									{TIME_FILTERS.map((item) => (
+										<button
+											key={item.value}
+											type="button"
+											role="menuitemradio"
+											aria-checked={timeFilter === item.value}
+											className={`omp-filter-item ${timeFilter === item.value ? "active" : ""}`}
+											onClick={() => {
+												setTimeFilter(item.value);
+												setFilterOpen(false);
+											}}
+										>
+											<span>{item.label}</span>
+											{timeFilter === item.value && <Icon name="check" size={14} />}
+										</button>
+									))}
+								</div>
+								<button
+									type="button"
+									className="omp-filter-reset"
+									disabled={!filtersActive}
+									onClick={() => {
+										setStatusFilter("all");
+										setTimeFilter("all");
+									}}
+								>
+									重置筛选条件
+								</button>
+							</div>
+						)}
+					</span>
+					<span className="omp-title-divider" />
 					<strong className="omp-title-session" title={activeTitle}>
 						{activeTitle}
 					</strong>
-					<span className="omp-title-divider" />
+				</div>
+				<div className="omp-titlebar-right">
 					<span className={`omp-connection ${connected ? "online" : "offline"}`} title={status}>
 						<span className="omp-connection-dot" />
 						{connected ? "已连接" : "未连接"}
 					</span>
-				</div>
-				<div className="omp-titlebar-right">
+					<span className="omp-title-divider" />
 					<span className="omp-title-tip">
 						<button
 							type="button"
@@ -1520,7 +1682,10 @@ export function App() {
 			</header>
 
 			<div className="omp-workspace">
-				<aside className="omp-sidebar">
+				<aside
+					className={`omp-sidebar ${sidebarCollapsed ? "collapsed" : ""}`}
+					aria-hidden={sidebarCollapsed}
+				>
 					<div className="omp-sidebar-nav">
 						<button
 							type="button"
@@ -1571,8 +1736,12 @@ export function App() {
 
 						{sidebarView === "recent" ? (
 							<div className="omp-session-list">
-								{sessions.length === 0 && <div className="omp-list-empty">还没有会话</div>}
-								{sessions.map((session) => (
+								{filteredSessions.length === 0 && (
+									<div className="omp-list-empty">
+										{filtersActive ? "没有符合条件的会话" : "还没有会话"}
+									</div>
+								)}
+								{filteredSessions.map((session) => (
 									<button
 										key={session.id}
 										type="button"
@@ -1592,8 +1761,13 @@ export function App() {
 							</div>
 						) : (
 							<div className="omp-session-list">
+								{filteredSessions.length === 0 && (
+									<div className="omp-list-empty">
+										{filtersActive ? "没有符合条件的会话" : "还没有会话"}
+									</div>
+								)}
 								{Object.entries(
-									sessions.reduce<Record<string, Session[]>>((groups, session) => {
+									filteredSessions.reduce<Record<string, Session[]>>((groups, session) => {
 										const key = dirName(session.cwd || settings.cwd);
 										(groups[key] ||= []).push(session);
 										return groups;

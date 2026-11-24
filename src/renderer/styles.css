@@ -204,6 +204,9 @@ summary:focus-visible {
   opacity: 0.4;
   cursor: default;
 }
+.omp-title-action.filtered {
+  color: var(--accent);
+}
 .omp-title-session {
   flex: 0 1 320px;
   min-width: 0;
@@ -269,6 +272,100 @@ summary:focus-visible {
   opacity: 1;
   visibility: visible;
   transform: translate(-50%, 0);
+}
+
+/* ---------- 任务筛选菜单 ---------- */
+.omp-filter-wrap {
+  position: relative;
+  display: inline-flex;
+  -webkit-app-region: no-drag;
+}
+.omp-filter-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.omp-filter-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: -4px;
+  z-index: 60;
+  width: 208px;
+  padding: 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--surface-panel);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.16),
+    0 2px 6px rgba(0, 0, 0, 0.06);
+  -webkit-app-region: no-drag;
+}
+.omp-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.omp-filter-group + .omp-filter-group {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+.omp-filter-label {
+  padding: 3px 10px 5px;
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+}
+.omp-filter-item {
+  width: 100%;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--font-md);
+  text-align: left;
+  cursor: pointer;
+}
+.omp-filter-item:hover {
+  background: var(--surface-hover);
+}
+.omp-filter-item.active {
+  background: var(--surface-subtle);
+  font-weight: 600;
+}
+.omp-filter-item svg {
+  flex: none;
+  color: var(--success);
+}
+.omp-filter-reset {
+  width: 100%;
+  height: 34px;
+  margin-top: 6px;
+  padding: 0 10px;
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.omp-filter-reset:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+.omp-filter-reset:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .omp-connection {
@@ -395,6 +492,19 @@ summary:focus-visible {
   padding: var(--space-4) var(--space-3) var(--space-3);
   background: var(--surface-panel);
   border-right: 1px solid var(--border-subtle);
+  transition:
+    width 170ms ease,
+    padding 170ms ease,
+    opacity 140ms ease;
+}
+.omp-sidebar.collapsed {
+  width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  overflow: hidden;
+  opacity: 0;
+  border-right-color: transparent;
+  pointer-events: none;
 }
 .omp-sidebar-nav {
   display: flex;
