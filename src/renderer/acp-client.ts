@@ -4,6 +4,15 @@
  * 这样 omp 升级导致 SDK 变更时外壳不受影响。
  */
 
+export type ThemeMode = "light" | "dark" | "system";
+
+export interface DesktopSettings {
+	ompCliPath: string;
+	bunPath: string;
+	cwd: string;
+	theme: ThemeMode;
+}
+
 export interface AcpBridge {
 	agent: {
 		start(): Promise<{ ok: boolean; error?: string }>;
@@ -12,8 +21,8 @@ export interface AcpBridge {
 		send(line: string): Promise<{ ok: boolean; error?: string }>;
 	};
 	settings: {
-		get(): Promise<{ ompCliPath: string; bunPath: string; cwd: string; theme: "light" | "dark" }>;
-		set(next: Record<string, unknown>): Promise<Record<string, unknown>>;
+		get(): Promise<DesktopSettings>;
+		set(next: Partial<DesktopSettings>): Promise<DesktopSettings>;
 	};
 	onFrame(cb: (line: string) => void): () => void;
 	onStderr(cb: (text: string) => void): () => void;
@@ -119,7 +128,6 @@ export class AcpClient {
 			return;
 		}
 
-		// 响应我们发出的请求
 		if (typeof msg.id === "number" && ("result" in msg || "error" in msg)) {
 			const p = this.pending.get(msg.id);
 			if (p) {
@@ -130,20 +138,24 @@ export class AcpClient {
 			return;
 		}
 
-		// agent 发来的请求 → 分发给宿主处理
 		if (typeof msg.id === "number" && "method" in msg) {
 			this.handleServerRequest(msg.id as number, msg.method as string, msg.params);
 			return;
 		}
 
-		// 通知
 		if ("method" in msg) {
 			this.emit({ type: "notification", method: msg.method as string, params: msg.params });
 		}
 	}
 
 	private handleServerRequest(id: number, method: string, params: unknown) {
-		this.emit({ type: "server_request", method, params, respond: (r) => this.respond(id, r) });
+		this.emit({
+			type: "server_request",
+			method,
+			params,
+			respond: (result) => this.respond(id, result),
+			respondError: (code, message) => this.respond(id, undefined, { code, message }),
+		});
 	}
 
 	// ---- 对外 ACP 方法 ----
@@ -190,4 +202,5 @@ export type AcpEvent =
 			method: string;
 			params: unknown;
 			respond: (result: unknown) => void;
+			respondError: (code: number, message: string) => void;
 	  };

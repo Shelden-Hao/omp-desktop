@@ -1,9 +1,10 @@
 import { contextBridge, ipcRenderer } from "electron";
+import type { DesktopSettings } from "../renderer/acp-client";
 
 export interface DesktopBridge {
 	settings: {
-		get(): Promise<{ ompCliPath: string; bunPath: string; cwd: string; theme: "light" | "dark" }>;
-		set(next: Record<string, unknown>): Promise<Record<string, unknown>>;
+		get(): Promise<DesktopSettings>;
+		set(next: Partial<DesktopSettings>): Promise<DesktopSettings>;
 	};
 	agent: {
 		start(): Promise<{ ok: boolean; error?: string }>;

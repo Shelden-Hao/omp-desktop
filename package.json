@@ -2,7 +2,7 @@
   "name": "omp-desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "A WorkBuddy-style desktop GUI for omp (oh-my-pi) coding agent, powered by Agent Client Protocol",
+  "description": "Desktop shell for the omp coding agent, powered by the Agent Client Protocol",
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "vite",

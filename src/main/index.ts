@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, nativeTheme } from "electron";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -12,7 +12,7 @@ interface AppSettings {
 	ompCliPath: string;
 	bunPath: string;
 	cwd: string;
-	theme: "light" | "dark";
+	theme: "light" | "dark" | "system";
 }
 
 const SETTINGS_PATH = join(app.getPath("userData"), "settings.json");
@@ -26,7 +26,7 @@ function defaultSettings(): AppSettings {
 		ompCliPath: join(home, ".bun", "install", "global", "node_modules", "@oh-my-pi", "pi-coding-agent", "dist", "cli.js"),
 		bunPath: join(npmGlobal, "bun", "bin", "bun.exe"),
 		cwd: join(home, "Desktop"),
-		theme: "dark",
+		theme: "system",
 	};
 }
 
@@ -48,6 +48,7 @@ function saveSettings(next: AppSettings) {
 }
 
 let settings = loadSettings();
+nativeTheme.themeSource = settings.theme === "system" ? "system" : settings.theme;
 
 // ---------------------------------------------------------------------------
 // ACP 子进程：spawn omp acp，stdin/stdout 走 NDJSON JSON-RPC
@@ -150,8 +151,14 @@ function createWindow() {
 
 app.whenReady().then(() => {
 	ipcMain.handle("settings:get", () => settings);
-	ipcMain.handle("settings:set", (_e, next: AppSettings) => {
-		settings = { ...settings, ...next };
+	ipcMain.handle("settings:set", (_e, next: Partial<AppSettings>) => {
+		const requestedTheme = next.theme;
+		const theme =
+			requestedTheme === "light" || requestedTheme === "dark" || requestedTheme === "system"
+				? requestedTheme
+				: settings.theme;
+		settings = { ...settings, ...next, theme };
+		nativeTheme.themeSource = theme === "system" ? "system" : theme;
 		saveSettings(settings);
 		return settings;
 	});
