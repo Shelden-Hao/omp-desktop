@@ -755,10 +755,68 @@ mark.omp-search-hit-active {
   flex-direction: column;
   background: var(--surface-app);
 }
+.omp-messages-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
 .omp-messages {
   flex: 1;
   overflow-y: auto;
   padding: var(--space-8) clamp(var(--space-6), 6vw, var(--space-8));
+}
+.omp-scroll-bottom {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 6;
+  height: 108px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 10px;
+  background: linear-gradient(
+    to top,
+    var(--surface-app) 28%,
+    color-mix(in srgb, var(--surface-app) 68%, transparent) 64%,
+    transparent
+  );
+  pointer-events: none;
+  animation: omp-scroll-hint-in 160ms ease;
+}
+.omp-scroll-bottom button {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: 50%;
+  background: var(--surface-panel);
+  color: var(--text-secondary);
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: var(--shadow-md);
+  transition:
+    color 120ms ease,
+    border-color 120ms ease,
+    transform 120ms ease;
+}
+.omp-scroll-bottom button:hover {
+  border-color: var(--accent-ring);
+  color: var(--accent);
+  transform: translateY(-1px);
+}
+@keyframes omp-scroll-hint-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .omp-empty {
   min-height: 100%;

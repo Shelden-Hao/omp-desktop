@@ -715,6 +715,7 @@ export function App() {
 	const [searchText, setSearchText] = useState("");
 	const [searchIndex, setSearchIndex] = useState(0);
 	const [searchHitCount, setSearchHitCount] = useState(0);
+	const [atBottom, setAtBottom] = useState(true);
 	const [sessionStates, setSessionStates] = useState<Record<string, SessionState>>({});
 	const [modelMenuOpen, setModelMenuOpen] = useState(false);
 
@@ -727,6 +728,7 @@ export function App() {
 	const pendingPermissionRef = useRef<PermissionState | null>(null);
 	const cancelledSessionRef = useRef<string | null>(null);
 	const runningRef = useRef(false);
+	const atBottomRef = useRef(true);
 
 	const messages = useMemo(
 		() => (activeId ? messagesBySession[activeId] || [] : []),
@@ -734,6 +736,22 @@ export function App() {
 	);
 	const visibleMessages = messages;
 	const currentDoc = docs.find((doc) => doc.key === activeDoc);
+
+	const updateAtBottom = () => {
+		const el = scrollRef.current;
+		if (!el) return;
+		const next = el.scrollHeight - el.scrollTop - el.clientHeight <= 24;
+		atBottomRef.current = next;
+		setAtBottom(next);
+	};
+
+	const scrollToBottom = () => {
+		const el = scrollRef.current;
+		if (!el) return;
+		el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+		atBottomRef.current = true;
+		setAtBottom(true);
+	};
 
 	const jumpSearch = (delta: number) => {
 		if (!searchHitCount) return;
@@ -1169,6 +1187,7 @@ export function App() {
 	}, [handleEvent, loadSessionHistory, persistSessions]);
 
 	useEffect(() => {
+		if (!atBottomRef.current) return;
 		scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
 	}, [messages.length, permission, running]);
 
@@ -1179,6 +1198,8 @@ export function App() {
 		const startedAt = Date.now();
 		const userMessageId = uid();
 		setInput("");
+		atBottomRef.current = true;
+		setAtBottom(true);
 		updateMessages(sessionId, (prev) => [
 			...prev,
 			{ id: userMessageId, role: "user", blocks: [{ type: "text", text }], ts: startedAt },
@@ -1684,151 +1705,165 @@ export function App() {
 									</button>
 								</div>
 							)}
-							<div className="omp-messages" ref={scrollRef}>
-								{visibleMessages.length === 0 && (
-									<div className="omp-empty">
-										<div className="omp-empty-mark">
-											<Icon name="spark" size={28} />
-										</div>
-										<h2>把任务交给 omp</h2>
-										<p>它会在当前工作目录中读取文件、执行命令，并把过程展现在这里。</p>
-										<div className="omp-empty-hints">
-											{[
-												"解释当前目录的代码结构",
-												"帮我修复一个失败的测试",
-												"梳理这个项目的待办事项",
-											].map((hint) => (
-												<button
-													key={hint}
-													type="button"
-													onClick={() => {
-														setInput(hint);
-														inputRef.current?.focus();
-													}}
-												>
-													{hint}
-													<Icon name="chevron-right" size={12} />
-												</button>
-											))}
-										</div>
-									</div>
-								)}
-
-								{visibleMessages.map((message, messageIndex) => {
-									const hasPendingTool = message.blocks.some(
-										(block) => block.type === "tool_call" && block.status === "pending",
-									);
-									const isActive = running && messageIndex === visibleMessages.length - 1;
-									const generating = message.role === "agent" && (isActive || hasPendingTool);
-									let splitAt = message.blocks.length;
-									while (splitAt > 0 && message.blocks[splitAt - 1].type === "text") splitAt -= 1;
-									const processBlocks = message.blocks.slice(0, splitAt);
-									const finalBlocks = message.blocks.slice(splitAt);
-									const hasProcessFold =
-										message.role === "agent" &&
-										processBlocks.length > 0 &&
-										finalBlocks.length > 0 &&
-										!isActive;
-									const contentBlocks = hasProcessFold ? finalBlocks : message.blocks;
-									return (
-										<article
-											key={message.id}
-											className={`omp-message ${message.role}`}
-											data-message-id={message.id}
-										>
-											<div className="omp-message-avatar">
-												{message.role === "user" ? (
-													"你"
-												) : message.role === "agent" ? (
-													<Icon name="spark" size={13} />
-												) : (
-													<Icon name="warning" size={13} />
-												)}
+							<div className="omp-messages-wrap">
+								<div className="omp-messages" ref={scrollRef} onScroll={updateAtBottom}>
+									{visibleMessages.length === 0 && (
+										<div className="omp-empty">
+											<div className="omp-empty-mark">
+												<Icon name="spark" size={28} />
 											</div>
-											<div className="omp-message-body">
-												<div className="omp-message-meta">
-													<span>
-														{message.role === "user"
-															? "你"
-															: message.role === "agent"
-																? "omp"
-																: "系统"}
-													</span>
-													<time>
-														{new Date(message.ts).toLocaleTimeString("zh-CN", {
-															hour: "2-digit",
-															minute: "2-digit",
-														})}
-													</time>
-													{message.role === "user" && message.durationMs !== undefined && (
-														<span className="omp-duration">
-															<Icon name="check" size={11} /> 已完成{" "}
-															{formatDuration(message.durationMs)}
-														</span>
+											<h2>把任务交给 omp</h2>
+											<p>它会在当前工作目录中读取文件、执行命令，并把过程展现在这里。</p>
+											<div className="omp-empty-hints">
+												{[
+													"解释当前目录的代码结构",
+													"帮我修复一个失败的测试",
+													"梳理这个项目的待办事项",
+												].map((hint) => (
+													<button
+														key={hint}
+														type="button"
+														onClick={() => {
+															setInput(hint);
+															inputRef.current?.focus();
+														}}
+													>
+														{hint}
+														<Icon name="chevron-right" size={12} />
+													</button>
+												))}
+											</div>
+										</div>
+									)}
+
+									{visibleMessages.map((message, messageIndex) => {
+										const hasPendingTool = message.blocks.some(
+											(block) => block.type === "tool_call" && block.status === "pending",
+										);
+										const isActive = running && messageIndex === visibleMessages.length - 1;
+										const generating = message.role === "agent" && (isActive || hasPendingTool);
+										let splitAt = message.blocks.length;
+										while (splitAt > 0 && message.blocks[splitAt - 1].type === "text") splitAt -= 1;
+										const processBlocks = message.blocks.slice(0, splitAt);
+										const finalBlocks = message.blocks.slice(splitAt);
+										const hasProcessFold =
+											message.role === "agent" &&
+											processBlocks.length > 0 &&
+											finalBlocks.length > 0 &&
+											!isActive;
+										const contentBlocks = hasProcessFold ? finalBlocks : message.blocks;
+										return (
+											<article
+												key={message.id}
+												className={`omp-message ${message.role}`}
+												data-message-id={message.id}
+											>
+												<div className="omp-message-avatar">
+													{message.role === "user" ? (
+														"你"
+													) : message.role === "agent" ? (
+														<Icon name="spark" size={13} />
+													) : (
+														<Icon name="warning" size={13} />
 													)}
 												</div>
-												{message.role === "agent" &&
-													(hasProcessFold ? (
-														<details className="omp-process-fold">
-															<summary className="omp-agent-status">
-																<Icon name="check" size={11} />
-																<span>
-																	已完成
-																	{message.durationMs !== undefined
-																		? ` ${formatDuration(message.durationMs)}`
-																		: ""}
-																</span>
-																<span className="omp-process-hint">查看处理过程</span>
-																<Icon name="chevron" size={12} className="omp-fold-chevron" />
-															</summary>
-															<div className="omp-process-body">
-																{processBlocks.map((block, blockIndex) => (
-																	<Block
-																		key={blockIndex}
-																		block={block}
-																		onOpenDoc={openDoc}
-																		query={searchText.trim()}
-																	/>
-																))}
-															</div>
-														</details>
-													) : (
-														<div className={`omp-agent-status ${generating ? "busy" : ""}`}>
-															<Icon name={generating ? "spark" : "check"} size={11} />
-															{generating ? "生成中" : "已完成"}
-														</div>
-													))}
-												{contentBlocks.length > 0 && (
-													<div className="omp-message-content">
-														{contentBlocks.map((block, blockIndex) => (
-															<Block
-																key={blockIndex}
-																block={block}
-																onOpenDoc={openDoc}
-																query={searchText.trim()}
-															/>
-														))}
+												<div className="omp-message-body">
+													<div className="omp-message-meta">
+														<span>
+															{message.role === "user"
+																? "你"
+																: message.role === "agent"
+																	? "omp"
+																	: "系统"}
+														</span>
+														<time>
+															{new Date(message.ts).toLocaleTimeString("zh-CN", {
+																hour: "2-digit",
+																minute: "2-digit",
+															})}
+														</time>
+														{message.role === "user" && message.durationMs !== undefined && (
+															<span className="omp-duration">
+																<Icon name="check" size={11} /> 已完成{" "}
+																{formatDuration(message.durationMs)}
+															</span>
+														)}
 													</div>
-												)}
-												<MessageActions
-													text={message.blocks.map((block) => block.text).join("\n")}
-													onRetry={
-														message.role === "user" ? () => retryMessage(message) : undefined
-													}
-												/>
-											</div>
-										</article>
-									);
-								})}
+													{message.role === "agent" &&
+														(hasProcessFold ? (
+															<details className="omp-process-fold">
+																<summary className="omp-agent-status">
+																	<Icon name="check" size={11} />
+																	<span>
+																		已完成
+																		{message.durationMs !== undefined
+																			? ` ${formatDuration(message.durationMs)}`
+																			: ""}
+																	</span>
+																	<span className="omp-process-hint">查看处理过程</span>
+																	<Icon name="chevron" size={12} className="omp-fold-chevron" />
+																</summary>
+																<div className="omp-process-body">
+																	{processBlocks.map((block, blockIndex) => (
+																		<Block
+																			key={blockIndex}
+																			block={block}
+																			onOpenDoc={openDoc}
+																			query={searchText.trim()}
+																		/>
+																	))}
+																</div>
+															</details>
+														) : (
+															<div className={`omp-agent-status ${generating ? "busy" : ""}`}>
+																<Icon name={generating ? "spark" : "check"} size={11} />
+																{generating ? "生成中" : "已完成"}
+															</div>
+														))}
+													{contentBlocks.length > 0 && (
+														<div className="omp-message-content">
+															{contentBlocks.map((block, blockIndex) => (
+																<Block
+																	key={blockIndex}
+																	block={block}
+																	onOpenDoc={openDoc}
+																	query={searchText.trim()}
+																/>
+															))}
+														</div>
+													)}
+													<MessageActions
+														text={message.blocks.map((block) => block.text).join("\n")}
+														onRetry={
+															message.role === "user" ? () => retryMessage(message) : undefined
+														}
+													/>
+												</div>
+											</article>
+										);
+									})}
 
-								{running && (
-									<div className="omp-typing">
-										<span className="omp-typing-dots">
-											<i />
-											<i />
-											<i />
-										</span>
-										omp 正在处理
+									{running && (
+										<div className="omp-typing">
+											<span className="omp-typing-dots">
+												<i />
+												<i />
+												<i />
+											</span>
+											omp 正在处理
+										</div>
+									)}
+								</div>
+								{!atBottom && (
+									<div className="omp-scroll-bottom">
+										<button
+											type="button"
+											onClick={scrollToBottom}
+											title="回到最底部"
+											aria-label="回到最底部"
+										>
+											<Icon name="chevron" size={16} />
+										</button>
 									</div>
 								)}
 							</div>
