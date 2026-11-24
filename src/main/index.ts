@@ -319,14 +319,38 @@ function readTextDocument(filePath: string): TextDocument {
 	};
 }
 
+function firstExisting(candidates: string[]): string {
+	for (const candidate of candidates) {
+		if (candidate && existsSync(candidate)) return candidate;
+	}
+	return candidates[0] || "";
+}
+
+function findBun(home: string, npmGlobal: string): string {
+	const fromPath = (process.env.PATH || "").split(/[;:]/).map((dir) => dir.replace(/^"|"$/g, ""));
+	const candidates: string[] = [];
+	for (const dir of fromPath) {
+		if (/node\/versions/i.test(dir)) candidates.push(join(dir, "node_modules", "bun", "bin", "bun.exe"));
+		candidates.push(join(dir, "bun.exe"));
+	}
+	candidates.push(
+		join(home, ".bun", "bin", "bun.exe"),
+		join(npmGlobal, "bun", "bin", "bun.exe"),
+	);
+	return firstExisting(candidates);
+}
+
 function defaultSettings(): AppSettings {
 	const home = homedir();
 	const npmGlobal = app.isPackaged
 		? join(home, "AppData", "Roaming", "npm")
 		: process.env.npm_config_prefix || join(home, "AppData", "Roaming", "npm");
 	return {
-		ompCliPath: join(home, ".bun", "install", "global", "node_modules", "@oh-my-pi", "pi-coding-agent", "dist", "cli.js"),
-		bunPath: join(npmGlobal, "bun", "bin", "bun.exe"),
+		ompCliPath: firstExisting([
+			join(home, ".bun", "install", "global", "node_modules", "@oh-my-pi", "pi-coding-agent", "dist", "cli.js"),
+			join(npmGlobal, "node_modules", "@oh-my-pi", "pi-coding-agent", "dist", "cli.js"),
+		]),
+		bunPath: findBun(home, npmGlobal),
 		cwd: join(home, "Desktop"),
 		theme: "system",
 	};
@@ -336,7 +360,11 @@ function loadSettings(): AppSettings {
 	const defaults = defaultSettings();
 	try {
 		if (existsSync(SETTINGS_PATH)) {
-			return { ...defaults, ...JSON.parse(readFileSync(SETTINGS_PATH, "utf8")) };
+			const saved = JSON.parse(readFileSync(SETTINGS_PATH, "utf8")) as Partial<AppSettings>;
+			// 旧配置里的路径若已失效，回退到自动探测值，避免开箱连不上。
+			if (saved.bunPath && !existsSync(saved.bunPath)) saved.bunPath = defaults.bunPath;
+			if (saved.ompCliPath && !existsSync(saved.ompCliPath)) saved.ompCliPath = defaults.ompCliPath;
+			return { ...defaults, ...saved };
 		}
 	} catch {
 		// 配置损坏时回退默认值
@@ -460,8 +488,8 @@ function stopAgent() {
 
 function createWindow() {
 	const win = new BrowserWindow({
-		width: 1280,
-		height: 820,
+		width: 1440,
+		height: 900,
 		minWidth: 900,
 		minHeight: 600,
 		title: "OMP Desktop",
