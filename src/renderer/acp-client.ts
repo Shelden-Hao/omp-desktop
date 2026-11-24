@@ -78,6 +78,10 @@ export interface ContentBlock {
   type: "text" | "thinking" | "tool_call" | "tool_result" | "diff" | "other";
   text: string;
   toolName?: string;
+  title?: string;
+  kind?: string;
+  rawInput?: string;
+  result?: string;
   status?: "pending" | "completed" | "failed";
   raw?: unknown;
 }

@@ -93,6 +93,27 @@ function formatDuration(ms?: number) {
 	return `${minutes}分${seconds % 60}秒`;
 }
 
+function extractText(value: unknown): string {
+	if (typeof value === "string") return value;
+	if (Array.isArray(value)) return value.map(extractText).filter(Boolean).join("");
+	if (value && typeof value === "object") {
+		const obj = value as Record<string, unknown>;
+		if (typeof obj.text === "string") return obj.text;
+		if (obj.content !== undefined) return extractText(obj.content);
+	}
+	return "";
+}
+
+function formatToolInput(raw: unknown): string {
+	if (raw === undefined || raw === null) return "";
+	if (typeof raw === "string") return raw;
+	try {
+		return JSON.stringify(raw, null, 2);
+	} catch {
+		return String(raw);
+	}
+}
+
 function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
 	const common = {
 		width: size,
@@ -684,7 +705,13 @@ export function App() {
 	);
 
 	const updateToolStatus = useCallback(
-		(sessionId: string, toolCallId: string, next: "completed" | "failed", result?: string) => {
+		(
+			sessionId: string,
+			toolCallId: string,
+			next: "completed" | "failed",
+			result?: string,
+			title?: string,
+		) => {
 			const index = toolIndex.current.get(`${sessionId}:${toolCallId}`);
 			if (index === undefined) return;
 			updateMessages(sessionId, (prev) => {
@@ -694,8 +721,13 @@ export function App() {
 				copy[index] = {
 					...message,
 					blocks: message.blocks.map((block) =>
-						block.toolName && block.text === toolCallId
-							? { ...block, status: next, text: result || block.text }
+						block.type === "tool_call" && block.text === toolCallId
+							? {
+									...block,
+									status: next,
+									result: result || block.result,
+									title: title || block.title,
+								}
 							: block,
 					),
 				};
@@ -778,12 +810,20 @@ export function App() {
 					appendBlock(sessionId, { type: "thinking", text: content.text });
 				} else if (kind === "tool_call") {
 					const toolCallId = update.toolCallId as string;
+					const toolTitle = typeof update.title === "string" ? update.title : "";
+					const toolKind = typeof update.kind === "string" ? update.kind : "";
+					const toolName =
+						typeof update.name === "string" && update.name ? update.name : toolKind || "tool";
 					appendBlock(
 						sessionId,
 						{
 							type: "tool_call",
 							text: toolCallId,
-							toolName: (update.title as string) || (update.kind as string) || "tool",
+							toolName,
+							title: toolTitle,
+							kind: toolKind,
+							rawInput: formatToolInput(update.rawInput),
+							result: extractText(update.content),
 							status: "pending",
 							raw: update,
 						},
@@ -792,14 +832,34 @@ export function App() {
 				} else if (kind === "tool_call_update") {
 					const toolCallId = update.toolCallId as string;
 					const next = update.status as string;
+					const nextTitle = typeof update.title === "string" ? update.title : undefined;
+					const result = update.content !== undefined ? extractText(update.content) : undefined;
 					if (next === "completed" || next === "failed") {
-						const result = (update.content as { text?: string } | undefined)?.text;
 						updateToolStatus(
 							sessionId,
 							toolCallId,
 							next === "completed" ? "completed" : "failed",
 							result,
+							nextTitle,
 						);
+					} else if (nextTitle || result) {
+						updateMessages(sessionId, (prev) => {
+							const copy = [...prev];
+							for (const message of copy) {
+								const idx = message.blocks.findIndex(
+									(b) => b.type === "tool_call" && b.text === toolCallId,
+								);
+								if (idx < 0) continue;
+								const block = message.blocks[idx];
+								message.blocks[idx] = {
+									...block,
+									title: nextTitle || block.title,
+									result: result || block.result,
+								};
+								break;
+							}
+							return copy;
+						});
 					}
 				}
 				return;
@@ -855,7 +915,7 @@ export function App() {
 					event.respond({});
 			}
 		},
-		[appendBlock, updateToolStatus],
+		[appendBlock, updateToolStatus, updateMessages],
 	);
 
 	useEffect(() => {
