@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme } from "electron";
-import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 
@@ -332,6 +332,20 @@ function findBun(home: string, npmGlobal: string): string {
 	for (const dir of fromPath) {
 		if (/node\/versions/i.test(dir)) candidates.push(join(dir, "node_modules", "bun", "bin", "bun.exe"));
 		candidates.push(join(dir, "bun.exe"));
+	}
+	// WorkBuddy / nvm4w 等会把 bun 装在版本化 node 目录里，逐个扫描。
+	const versionRoots = [
+		join(home, ".workbuddy", "binaries", "node", "versions"),
+		join(home, "AppData", "Roaming", "nvm", "v"),
+	];
+	for (const root of versionRoots) {
+		try {
+			for (const entry of readdirSync(root)) {
+				candidates.push(join(root, entry, "node_modules", "bun", "bin", "bun.exe"));
+			}
+		} catch {
+			// 目录不存在则跳过
+		}
 	}
 	candidates.push(
 		join(home, ".bun", "bin", "bun.exe"),
