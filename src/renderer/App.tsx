@@ -525,7 +525,24 @@ function Block({
 		return (
 			<details className="omp-thinking">
 				<summary>
-					<Icon name="spark" size={13} /> 思考过程
+					<Icon name="spark" size={14} />
+					<span>深度思考</span>
+					<svg
+						className="omp-fold-chevron"
+						viewBox="0 0 16 16"
+						width="13"
+						height="13"
+						aria-hidden="true"
+					>
+						<path
+							d="M4 6l4 4 4-4"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="1.5"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+						/>
+					</svg>
 				</summary>
 				<div className="omp-thinking-body">
 					<Markdown text={block.text} onOpen={onOpenDoc} query={query} />

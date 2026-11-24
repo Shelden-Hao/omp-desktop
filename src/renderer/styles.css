@@ -889,31 +889,47 @@ mark {
 }
 
 .omp-thinking {
-  margin: var(--space-2) 0;
+  margin: var(--space-3) 0;
 }
 .omp-thinking summary,
 .omp-tool-result summary {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   padding: 4px 0;
   color: var(--text-muted);
-  font-size: var(--font-sm);
+  font-size: var(--font-md);
+  font-weight: 500;
   cursor: pointer;
   list-style: none;
+  user-select: none;
+}
+.omp-thinking summary:hover,
+.omp-tool-result summary:hover {
+  color: var(--text-secondary);
 }
 .omp-thinking summary::-webkit-details-marker,
 .omp-tool-result summary::-webkit-details-marker {
   display: none;
 }
+.omp-fold-chevron {
+  margin-left: 2px;
+  color: var(--text-muted);
+  transition: transform 150ms ease;
+}
+details[open] > summary .omp-fold-chevron {
+  transform: rotate(180deg);
+}
 .omp-thinking-body {
   margin-top: var(--space-2);
-  padding: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border-left: 2px solid var(--border-strong);
   background: var(--surface-subtle);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   color: var(--text-secondary);
   font-size: var(--font-md);
+  max-height: 360px;
+  overflow-y: auto;
 }
 
 .omp-tool-card {
