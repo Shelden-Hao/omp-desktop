@@ -694,6 +694,7 @@ export function App() {
 	const loadedSessions = useRef<Set<string>>(new Set());
 	const pendingPermissionRef = useRef<PermissionState | null>(null);
 	const cancelledSessionRef = useRef<string | null>(null);
+	const runningRef = useRef(false);
 
 	const messages = activeId ? messagesBySession[activeId] || [] : [];
 	const visibleMessages = searchText.trim()
@@ -712,6 +713,10 @@ export function App() {
 	useEffect(() => {
 		pendingPermissionRef.current = permission;
 	}, [permission]);
+
+	useEffect(() => {
+		runningRef.current = running;
+	}, [running]);
 
 	useEffect(() => {
 		const root = document.documentElement;
@@ -743,15 +748,51 @@ export function App() {
 	const appendBlock = useCallback(
 		(sessionId: string, block: ContentBlock, toolCallId?: string) => {
 			updateMessages(sessionId, (prev) => {
-				const last = prev[prev.length - 1];
-				if (last?.role === "agent" && !toolCallId) {
-					const copy = [...prev];
-					copy[copy.length - 1] = { ...last, blocks: [...last.blocks, block] };
+				const copy = [...prev];
+				let index = copy.length - 1;
+				if (index < 0 || copy[index].role !== "agent") {
+					copy.push({ id: uid(), role: "agent", blocks: [], ts: Date.now() });
+					index = copy.length - 1;
+				}
+				const message = copy[index];
+				const blocks = [...message.blocks];
+				const last = blocks[blocks.length - 1];
+				const canMergeText =
+					!toolCallId &&
+					last &&
+					last.type === block.type &&
+					(block.type === "text" || block.type === "thinking");
+				if (canMergeText) {
+					blocks[blocks.length - 1] = { ...last, text: last.text + block.text };
+				} else {
+					blocks.push(block);
+				}
+				copy[index] = { ...message, blocks };
+				if (toolCallId) toolIndex.current.set(`${sessionId}:${toolCallId}`, index);
+				return copy;
+			});
+		},
+		[updateMessages],
+	);
+
+	const appendUserChunk = useCallback(
+		(sessionId: string, text: string) => {
+			updateMessages(sessionId, (prev) => {
+				const copy = [...prev];
+				const last = copy[copy.length - 1];
+				if (last?.role === "user") {
+					const blocks = [...last.blocks];
+					const tail = blocks[blocks.length - 1];
+					if (tail?.type === "text") {
+						blocks[blocks.length - 1] = { ...tail, text: tail.text + text };
+					} else {
+						blocks.push({ type: "text", text });
+					}
+					copy[copy.length - 1] = { ...last, blocks };
 					return copy;
 				}
-				const message: ChatMessage = { id: uid(), role: "agent", blocks: [block], ts: Date.now() };
-				if (toolCallId) toolIndex.current.set(`${sessionId}:${toolCallId}`, prev.length);
-				return [...prev, message];
+				copy.push({ id: uid(), role: "user", blocks: [{ type: "text", text }], ts: Date.now() });
+				return copy;
 			});
 		},
 		[updateMessages],
@@ -857,7 +898,10 @@ export function App() {
 
 				const content = update.content as { text?: string } | undefined;
 
-				if (kind === "agent_message_chunk" && content?.text) {
+				if (kind === "user_message_chunk" && content?.text) {
+					// 历史回放会带用户消息；实时 prompt 的用户气泡已本地插入，忽略回声。
+					if (!runningRef.current) appendUserChunk(sessionId, content.text);
+				} else if (kind === "agent_message_chunk" && content?.text) {
 					appendBlock(sessionId, { type: "text", text: content.text });
 				} else if (kind === "agent_thought_chunk" && content?.text) {
 					appendBlock(sessionId, { type: "thinking", text: content.text });
@@ -968,7 +1012,7 @@ export function App() {
 					event.respond({});
 			}
 		},
-		[appendBlock, updateToolStatus, updateMessages],
+		[appendBlock, appendUserChunk, updateToolStatus, updateMessages],
 	);
 
 	useEffect(() => {
@@ -1064,6 +1108,7 @@ export function App() {
 			...prev,
 			{ id: userMessageId, role: "user", blocks: [{ type: "text", text }], ts: startedAt },
 		]);
+		runningRef.current = true;
 		setRunning(true);
 		try {
 			await client.prompt(sessionId, text);
@@ -1088,6 +1133,7 @@ export function App() {
 					item.id === userMessageId ? { ...item, durationMs: Date.now() - startedAt } : item,
 				),
 			);
+			runningRef.current = false;
 			setRunning(false);
 			inputRef.current?.focus();
 		}
@@ -1111,6 +1157,7 @@ export function App() {
 			pending.respond({ outcome: { outcome: "cancelled" } });
 			setPermission(null);
 		}
+		runningRef.current = false;
 		setRunning(false);
 	};
 
@@ -1563,56 +1610,72 @@ export function App() {
 									</div>
 								)}
 
-								{visibleMessages.map((message) => (
-									<article key={message.id} className={`omp-message ${message.role}`}>
-										<div className="omp-message-avatar">
-											{message.role === "user" ? (
-												"你"
-											) : message.role === "agent" ? (
-												<Icon name="spark" size={13} />
-											) : (
-												<Icon name="warning" size={13} />
-											)}
-										</div>
-										<div className="omp-message-body">
-											<div className="omp-message-meta">
-												<span>
-													{message.role === "user"
-														? "你"
-														: message.role === "agent"
-															? "omp"
-															: "系统"}
-												</span>
-												<time>
-													{new Date(message.ts).toLocaleTimeString("zh-CN", {
-														hour: "2-digit",
-														minute: "2-digit",
-													})}
-												</time>
-												{message.role === "user" && message.durationMs !== undefined && (
-													<span className="omp-duration">
-														<Icon name="check" size={11} /> 已完成{" "}
-														{formatDuration(message.durationMs)}
-													</span>
+								{visibleMessages.map((message, messageIndex) => {
+									const hasPendingTool = message.blocks.some(
+										(block) => block.type === "tool_call" && block.status === "pending",
+									);
+									const generating =
+										message.role === "agent" &&
+										((running && messageIndex === visibleMessages.length - 1) || hasPendingTool);
+									return (
+										<article key={message.id} className={`omp-message ${message.role}`}>
+											<div className="omp-message-avatar">
+												{message.role === "user" ? (
+													"你"
+												) : message.role === "agent" ? (
+													<Icon name="spark" size={13} />
+												) : (
+													<Icon name="warning" size={13} />
 												)}
 											</div>
-											<div className="omp-message-content">
-												{message.blocks.map((block, index) => (
-													<Block
-														key={index}
-														block={block}
-														onOpenDoc={openDoc}
-														query={searchText.trim()}
-													/>
-												))}
+											<div className="omp-message-body">
+												<div className="omp-message-meta">
+													<span>
+														{message.role === "user"
+															? "你"
+															: message.role === "agent"
+																? "omp"
+																: "系统"}
+													</span>
+													<time>
+														{new Date(message.ts).toLocaleTimeString("zh-CN", {
+															hour: "2-digit",
+															minute: "2-digit",
+														})}
+													</time>
+													{message.role === "user" && message.durationMs !== undefined && (
+														<span className="omp-duration">
+															<Icon name="check" size={11} /> 已完成{" "}
+															{formatDuration(message.durationMs)}
+														</span>
+													)}
+												</div>
+												{message.role === "agent" && (
+													<div className={`omp-agent-status ${generating ? "busy" : ""}`}>
+														<Icon name={generating ? "spark" : "check"} size={11} />
+														{generating ? "生成中" : "已完成"}
+													</div>
+												)}
+												<div className="omp-message-content">
+													{message.blocks.map((block, blockIndex) => (
+														<Block
+															key={blockIndex}
+															block={block}
+															onOpenDoc={openDoc}
+															query={searchText.trim()}
+														/>
+													))}
+												</div>
+												<MessageActions
+													text={message.blocks.map((block) => block.text).join("\n")}
+													onRetry={
+														message.role === "user" ? () => retryMessage(message) : undefined
+													}
+												/>
 											</div>
-											<MessageActions
-												text={message.blocks.map((block) => block.text).join("\n")}
-												onRetry={message.role === "user" ? () => retryMessage(message) : undefined}
-											/>
-										</div>
-									</article>
-								))}
+										</article>
+									);
+								})}
 
 								{running && (
 									<div className="omp-typing">

@@ -791,6 +791,30 @@ mark {
   background: var(--surface-panel);
   box-shadow: var(--shadow-sm);
 }
+.omp-message.agent .omp-message-meta {
+  margin-bottom: 2px;
+}
+.omp-message.agent .omp-message-content {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.omp-agent-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: -2px 0 var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+.omp-agent-status svg {
+  color: var(--success);
+}
+.omp-agent-status.busy svg {
+  color: var(--accent);
+}
 .omp-message.user .omp-message-content {
   background: var(--accent-soft);
   border-color: var(--accent-ring);
@@ -933,18 +957,19 @@ details[open] > summary .omp-fold-chevron {
 }
 
 .omp-tool-card {
-  margin: var(--space-2) 0;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--surface-code);
+  margin: 6px 0;
+  border: 0;
+  border-left: 2px solid var(--border-subtle);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: linear-gradient(90deg, var(--surface-subtle), transparent);
   overflow: hidden;
 }
 .omp-tool-summary {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: 38px;
-  padding: 6px var(--space-3);
+  min-height: 30px;
+  padding: 4px var(--space-3);
   cursor: pointer;
   list-style: none;
   user-select: none;
@@ -956,21 +981,17 @@ details[open] > summary .omp-fold-chevron {
   background: var(--surface-hover);
 }
 .omp-tool-icon {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   flex: none;
   display: grid;
   place-items: center;
-  border-radius: 6px;
-  background: var(--accent-soft);
   color: var(--accent);
 }
 .omp-tool-card.completed .omp-tool-icon {
-  background: color-mix(in srgb, var(--success) 14%, transparent);
   color: var(--success);
 }
 .omp-tool-card.failed .omp-tool-icon {
-  background: color-mix(in srgb, var(--danger) 14%, transparent);
   color: var(--danger);
 }
 .omp-tool-label {
@@ -994,8 +1015,7 @@ details[open] > summary .omp-fold-chevron {
   font-size: var(--font-sm);
 }
 .omp-tool-body {
-  padding: 0 var(--space-3) var(--space-3);
-  border-top: 1px solid var(--border-subtle);
+  padding: 0 var(--space-3) var(--space-3) 34px;
 }
 .omp-tool-section {
   margin-top: var(--space-3);
