@@ -536,6 +536,7 @@ function createWindow() {
 		minWidth: 900,
 		minHeight: 600,
 		title: "OMP Desktop",
+		frame: false,
 		webPreferences: {
 			preload: join(__dirname, "..", "preload", "index.js"),
 			contextIsolation: true,
@@ -552,6 +553,15 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+	ipcMain.handle("window:minimize", () => BrowserWindow.getFocusedWindow()?.minimize());
+	ipcMain.handle("window:maximize", () => {
+		const win = BrowserWindow.getFocusedWindow();
+		if (!win) return;
+		if (win.isMaximized()) win.unmaximize();
+		else win.maximize();
+	});
+	ipcMain.handle("window:close", () => BrowserWindow.getFocusedWindow()?.close());
+
 	ipcMain.handle("settings:get", () => settings);
 	ipcMain.handle("settings:set", (_e, next: Partial<AppSettings>) => {
 		const requestedTheme = next.theme;

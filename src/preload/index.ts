@@ -34,6 +34,11 @@ export interface DesktopBridge {
 		status(): Promise<{ running: boolean }>;
 		send(line: string): Promise<{ ok: boolean; error?: string }>;
 	};
+	window: {
+		minimize(): Promise<void>;
+		maximize(): Promise<void>;
+		close(): Promise<void>;
+	};
 	onFrame(cb: (line: string) => void): () => void;
 	onStderr(cb: (text: string) => void): () => void;
 	onExit(cb: (code: string) => void): () => void;
@@ -66,6 +71,11 @@ const bridge: DesktopBridge = {
 		stop: () => ipcRenderer.invoke("agent:stop"),
 		status: () => ipcRenderer.invoke("agent:status"),
 		send: (line) => ipcRenderer.invoke("agent:send", line),
+	},
+	window: {
+		minimize: () => ipcRenderer.invoke("window:minimize"),
+		maximize: () => ipcRenderer.invoke("window:maximize"),
+		close: () => ipcRenderer.invoke("window:close"),
 	},
 	onFrame: (cb) => {
 		const fn = (_e: unknown, line: string) => cb(line);

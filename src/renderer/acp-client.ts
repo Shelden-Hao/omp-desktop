@@ -40,6 +40,11 @@ export interface AcpBridge {
     status(): Promise<{ running: boolean }>;
     send(line: string): Promise<{ ok: boolean; error?: string }>;
   };
+  window: {
+    minimize(): Promise<void>;
+    maximize(): Promise<void>;
+    close(): Promise<void>;
+  };
   settings: {
     get(): Promise<DesktopSettings>;
     set(next: Partial<DesktopSettings>): Promise<DesktopSettings>;

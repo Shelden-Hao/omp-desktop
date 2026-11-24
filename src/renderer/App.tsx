@@ -52,7 +52,9 @@ type IconName =
 	| "layers"
 	| "chevron-right"
 	| "more"
-	| "rotate";
+	| "rotate"
+	| "minimize"
+	| "maximize";
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -185,6 +187,18 @@ function Icon({
 			return (
 				<svg {...common}>
 					<path d="M6 6l12 12M18 6 6 18" />
+				</svg>
+			);
+		case "minimize":
+			return (
+				<svg {...common}>
+					<path d="M5 12h14" />
+				</svg>
+			);
+		case "maximize":
+			return (
+				<svg {...common}>
+					<rect x="5" y="5" width="14" height="14" rx="1" />
 				</svg>
 			);
 		case "send":
@@ -1364,17 +1378,28 @@ export function App() {
 			<header className="omp-titlebar">
 				<div className="omp-titlebar-left">
 					<span className="omp-logo">
-						<Icon name="spark" size={15} />
+						<Icon name="spark" size={12} />
 					</span>
-					<span className="omp-product">OMP Desktop</span>
+					<button
+						type="button"
+						className="omp-title-action"
+						onClick={newSession}
+						disabled={!connected}
+						title="新建任务"
+						aria-label="新建任务"
+					>
+						<Icon name="plus" size={14} />
+					</button>
+					<strong className="omp-title-session" title={activeTitle}>
+						{activeTitle}
+					</strong>
 					<span className="omp-title-divider" />
-					<span className="omp-tagline">Coding Agent Shell</span>
-				</div>
-				<div className="omp-titlebar-right">
 					<span className={`omp-connection ${connected ? "online" : "offline"}`} title={status}>
 						<span className="omp-connection-dot" />
 						{connected ? "已连接" : "未连接"}
 					</span>
+				</div>
+				<div className="omp-titlebar-right">
 					<div className="omp-theme-switch" role="group" aria-label="主题模式">
 						{(["light", "dark", "system"] as ThemeMode[]).map((mode) => (
 							<button
@@ -1387,20 +1412,69 @@ export function App() {
 							>
 								<Icon
 									name={mode === "light" ? "sun" : mode === "dark" ? "moon" : "monitor"}
-									size={14}
+									size={12}
 								/>
 							</button>
 						))}
 					</div>
 					<button
 						type="button"
-						className="omp-icon-button"
+						className={`omp-title-action ${searchOpen ? "active" : ""}`}
+						onClick={() => {
+							setSearchOpen((value) => !value);
+							if (searchOpen) setSearchText("");
+						}}
+						title="搜索当前会话"
+						aria-label="搜索当前会话"
+					>
+						<Icon name="search" size={14} />
+					</button>
+					<button
+						type="button"
+						className={`omp-title-action ${showPreview ? "active" : ""}`}
+						onClick={() => setShowPreview((value) => !value)}
+						title={showPreview ? "隐藏文件预览" : "显示文件预览"}
+						aria-label="切换文件预览"
+					>
+						<Icon name="panel" size={14} />
+					</button>
+					<button
+						type="button"
+						className="omp-title-action"
 						onClick={() => setShowSettings(true)}
 						title="设置"
 						aria-label="设置"
 					>
-						<Icon name="settings" size={15} />
+						<Icon name="settings" size={14} />
 					</button>
+					<span className="omp-title-divider" />
+					<div className="omp-window-controls">
+						<button
+							type="button"
+							onClick={() => window.desktop.window.minimize()}
+							title="最小化"
+							aria-label="最小化"
+						>
+							<Icon name="minimize" size={12} />
+						</button>
+						<button
+							type="button"
+							onClick={() => window.desktop.window.maximize()}
+							title="最大化 / 还原"
+							aria-label="最大化或还原"
+						>
+							<Icon name="maximize" size={12} />
+						</button>
+						<button
+							type="button"
+							className="close"
+							onClick={() => window.desktop.window.close()}
+							title="关闭"
+							aria-label="关闭"
+						>
+							<Icon name="close" size={12} />
+						</button>
+					</div>
 				</div>
 			</header>
 
@@ -1529,37 +1603,6 @@ export function App() {
 				</aside>
 
 				<main className="omp-main">
-					<div className="omp-topbar">
-						<strong className="omp-topbar-title" title={activeTitle}>
-							{activeTitle}
-						</strong>
-						<div className="omp-topbar-actions">
-							<span className="omp-topbar-status" title={status}>
-								{status}
-							</span>
-							<button
-								type="button"
-								className={`omp-icon-button ${searchOpen ? "active" : ""}`}
-								onClick={() => {
-									setSearchOpen((value) => !value);
-									if (searchOpen) setSearchText("");
-								}}
-								title="搜索当前会话"
-								aria-label="搜索当前会话"
-							>
-								<Icon name="search" size={15} />
-							</button>
-							<button
-								type="button"
-								className={`omp-icon-button ${showPreview ? "active" : ""}`}
-								onClick={() => setShowPreview((value) => !value)}
-								title={showPreview ? "隐藏文件预览" : "显示文件预览"}
-								aria-label="切换文件预览"
-							>
-								<Icon name="panel" size={15} />
-							</button>
-						</div>
-					</div>
 					{searchOpen && (
 						<div className="omp-searchbar">
 							<Icon name="search" size={14} />
