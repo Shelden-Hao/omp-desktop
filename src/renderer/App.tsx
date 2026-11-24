@@ -13,7 +13,10 @@ interface Session {
 	id: string;
 	title: string;
 	cwd?: string;
+	ts?: number;
 }
+
+type SidebarView = "recent" | "grouped";
 
 interface PermissionState {
 	sessionId: string;
@@ -39,7 +42,15 @@ type IconName =
 	| "copy"
 	| "check"
 	| "spark"
-	| "warning";
+	| "warning"
+	| "search"
+	| "chat"
+	| "grid"
+	| "clock"
+	| "layers"
+	| "chevron-right"
+	| "more"
+	| "rotate";
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -52,6 +63,24 @@ const THEME_LABEL: Record<ThemeMode, string> = {
 function shortPath(path: string) {
 	const parts = path.replace(/\\/g, "/").split("/").filter(Boolean);
 	return parts.slice(-2).join("/") || "工作目录";
+}
+
+function dirName(path: string) {
+	const parts = path.replace(/\\/g, "/").split("/").filter(Boolean);
+	return parts[parts.length - 1] || "工作目录";
+}
+
+function relativeTime(ts?: number) {
+	if (!ts) return "";
+	const diff = Date.now() - ts;
+	const minute = 60_000;
+	const hour = 60 * minute;
+	const day = 24 * hour;
+	if (diff < minute) return "刚刚";
+	if (diff < hour) return `${Math.floor(diff / minute)}分钟前`;
+	if (diff < day) return `${Math.floor(diff / hour)}小时前`;
+	if (diff < 7 * day) return `${Math.floor(diff / day)}天前`;
+	return new Date(ts).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
 }
 
 function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
@@ -116,6 +145,22 @@ function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
 			return <svg {...common}><path d="m12 3 2.1 6.9L21 12l-6.9 2.1L12 21l-2.1-6.9L3 12l6.9-2.1L12 3Z" /></svg>;
 		case "warning":
 			return <svg {...common}><path d="M12 3 2.5 20h19L12 3ZM12 9v5M12 17.5v.5" /></svg>;
+		case "search":
+			return <svg {...common}><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>;
+		case "chat":
+			return <svg {...common}><path d="M20 15a2 2 0 0 1-2 2H8l-4 3V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2Z" /></svg>;
+		case "grid":
+			return <svg {...common}><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>;
+		case "clock":
+			return <svg {...common}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>;
+		case "layers":
+			return <svg {...common}><path d="m12 3 9 5-9 5-9-5 9-5ZM3 13l9 5 9-5" /></svg>;
+		case "chevron-right":
+			return <svg {...common}><path d="m9 6 6 6-6 6" /></svg>;
+		case "more":
+			return <svg {...common}><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></svg>;
+		case "rotate":
+			return <svg {...common}><path d="M3 12a9 9 0 1 0 2.6-6.4L3 8M3 3v5h5" /></svg>;
 	}
 }
 
@@ -339,6 +384,7 @@ export function App() {
 	const [docs, setDocs] = useState<DocFile[]>(DEFAULT_DOCS);
 	const [activeDoc, setActiveDoc] = useState<string | null>(null);
 	const [showPreview, setShowPreview] = useState(true);
+	const [sidebarView, setSidebarView] = useState<SidebarView>("recent");
 
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -423,7 +469,12 @@ export function App() {
 		try {
 			const loaded = await window.desktop.settings.get();
 			await window.desktop.sessions.set(
-				next.map((session) => ({ id: session.id, title: session.title, cwd: session.cwd || loaded.cwd })),
+				next.map((session) => ({
+					id: session.id,
+					title: session.title,
+					cwd: session.cwd || loaded.cwd,
+					ts: session.ts || Date.now(),
+				})),
 			);
 		} catch (error) {
 			setStatus(`会话保存失败：${(error as Error).message}`);
@@ -567,6 +618,7 @@ export function App() {
 					id: session.id,
 					title: session.title,
 					cwd: session.cwd || loaded.cwd,
+					ts: session.ts,
 				}));
 
 				try {
@@ -577,6 +629,7 @@ export function App() {
 								id: session.sessionId,
 								title: session.title || `会话 ${list.length + 1}`,
 								cwd: session.cwd || loaded.cwd,
+								ts: Date.now(),
 							});
 						}
 					}
@@ -586,7 +639,7 @@ export function App() {
 
 				if (list.length === 0) {
 					const session = await acp.newSession(loaded.cwd);
-					list = [{ id: session.sessionId, title: "会话 1", cwd: loaded.cwd }];
+					list = [{ id: session.sessionId, title: "会话 1", cwd: loaded.cwd, ts: Date.now() }];
 					loadedSessions.current.add(session.sessionId);
 				}
 
@@ -670,7 +723,7 @@ export function App() {
 			const session = await client.newSession(loaded.cwd);
 			const next: Session[] = [
 				...sessions,
-				{ id: session.sessionId, title: `会话 ${sessions.length + 1}`, cwd: loaded.cwd },
+				{ id: session.sessionId, title: `会话 ${sessions.length + 1}`, cwd: loaded.cwd, ts: Date.now() },
 			];
 			loadedSessions.current.add(session.sessionId);
 			setSessions(next);
@@ -794,30 +847,95 @@ export function App() {
 
 			<div className="omp-workspace">
 				<aside className="omp-sidebar">
-					<button type="button" className="omp-new-session" onClick={newSession} disabled={!connected}>
-						<Icon name="plus" size={15} />
-						新建会话
-					</button>
+					<div className="omp-sidebar-nav">
+						<button type="button" className="omp-nav-primary" onClick={newSession} disabled={!connected}>
+							<Icon name="plus" size={16} />
+							<span>新建任务</span>
+						</button>
+						<div className="omp-nav-static"><Icon name="chat" size={16} /><span>助理</span><em>本地</em></div>
+						<button type="button" className="omp-nav-static" onClick={() => setShowSettings(true)} title="MCP 与扩展在设置中配置">
+							<Icon name="layers" size={16} /><span>技能与连接器</span>
+						</button>
+					</div>
 
 					<div className="omp-sidebar-section">
-						<div className="omp-section-heading">
-							<span>会话</span>
-							<span className="omp-count">{sessions.length}</span>
+						<div className="omp-view-tabs" role="tablist" aria-label="会话视图">
+							<button
+								type="button"
+								role="tab"
+								aria-selected={sidebarView === "recent"}
+								className={sidebarView === "recent" ? "active" : ""}
+								onClick={() => setSidebarView("recent")}
+							>
+								<Icon name="clock" size={13} /> 最近
+							</button>
+							<button
+								type="button"
+								role="tab"
+								aria-selected={sidebarView === "grouped"}
+								className={sidebarView === "grouped" ? "active" : ""}
+								onClick={() => setSidebarView("grouped")}
+							>
+								<Icon name="grid" size={13} /> 分组
+							</button>
 						</div>
-						<div className="omp-session-list">
-							{sessions.map((session) => (
-								<button
-									key={session.id}
-									type="button"
-									className={`omp-session ${session.id === activeId ? "active" : ""}`}
-									onClick={() => void selectSession(session)}
-									title={session.id}
-								>
-									<Icon name="file" size={14} />
-									<span>{session.title}</span>
-								</button>
-							))}
-						</div>
+
+						{sidebarView === "recent" ? (
+							<div className="omp-session-list">
+								{sessions.length === 0 && <div className="omp-list-empty">还没有会话</div>}
+								{sessions.map((session) => (
+									<button
+										key={session.id}
+										type="button"
+										className={`omp-session ${session.id === activeId ? "active" : ""}`}
+										onClick={() => void selectSession(session)}
+										title={session.title}
+									>
+										<Icon name="chat" size={14} />
+										<span className="omp-session-title">{session.title}</span>
+										{running && session.id === activeId ? (
+											<span className="omp-session-spinner" title="运行中" />
+										) : (
+											<time>{relativeTime(session.ts)}</time>
+										)}
+									</button>
+								))}
+							</div>
+						) : (
+							<div className="omp-session-list">
+								{Object.entries(
+									sessions.reduce<Record<string, Session[]>>((groups, session) => {
+										const key = dirName(session.cwd || settings.cwd);
+										(groups[key] ||= []).push(session);
+										return groups;
+									}, {}),
+								).map(([group, items]) => (
+									<div key={group} className="omp-session-group">
+										<div className="omp-group-head">
+											<Icon name="folder" size={14} />
+											<span>{group}</span>
+											<span className="omp-count">{items.length}</span>
+										</div>
+										{items.map((session) => (
+											<button
+												key={session.id}
+												type="button"
+												className={`omp-session grouped ${session.id === activeId ? "active" : ""}`}
+												onClick={() => void selectSession(session)}
+												title={session.title}
+											>
+												<span className="omp-session-title">{session.title}</span>
+												{running && session.id === activeId ? (
+													<span className="omp-session-spinner" title="运行中" />
+												) : (
+													<time>{relativeTime(session.ts)}</time>
+												)}
+											</button>
+										))}
+									</div>
+								))}
+							</div>
+						)}
 					</div>
 
 					<div className="omp-sidebar-footer">

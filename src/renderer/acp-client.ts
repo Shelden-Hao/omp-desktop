@@ -17,6 +17,7 @@ export interface StoredSession {
 	id: string;
 	title: string;
 	cwd: string;
+	ts?: number;
 }
 
 export interface OpenedFile {

@@ -353,6 +353,7 @@ interface StoredSession {
 	id: string;
 	title: string;
 	cwd: string;
+	ts?: number;
 }
 
 function loadSessions(): StoredSession[] {
@@ -368,7 +369,7 @@ function loadSessions(): StoredSession[] {
 				typeof item.title === "string" &&
 				typeof item.cwd === "string",
 			)
-			.map((item) => ({ id: item.id, title: item.title, cwd: item.cwd }));
+			.map((item) => ({ id: item.id, title: item.title, cwd: item.cwd, ts: item.ts }));
 	} catch {
 		return [];
 	}
