@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AcpClient, type AcpEvent, type ChatMessage, type ContentBlock } from "./acp-client";
+import { DEFAULT_DOCS, type DocFile } from "./docs";
 
 interface Session {
 	id: string;
@@ -7,10 +8,6 @@ interface Session {
 }
 
 const uid = () => Math.random().toString(36).slice(2, 10);
-
-function messageText(msg: ChatMessage) {
-	return msg.blocks.map((b) => b.text).join("");
-}
 
 export function App() {
 	const [client, setClient] = useState<AcpClient | null>(null);
@@ -23,17 +20,18 @@ export function App() {
 	const [status, setStatus] = useState("准备连接 omp…");
 	const [stderrLog, setStderrLog] = useState<string[]>([]);
 	const [showSettings, setShowSettings] = useState(false);
-	const [settings, setSettingsState] = useState({ ompCliPath: "", bunPath: "", cwd: "", theme: "dark" as "light" | "dark" });
+	const [settings, setSettingsState] = useState({ ompCliPath: "", bunPath: "", cwd: "", theme: "light" as "light" | "dark" });
 	const [permission, setPermission] = useState<{
 		title: string;
 		options: Array<{ optionId: string; name: string; kind: string }>;
 		respond: (r: unknown) => void;
 	} | null>(null);
+	const [docs, setDocs] = useState<DocFile[]>(DEFAULT_DOCS);
+	const [activeDoc, setActiveDoc] = useState("README.md");
 
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const toolIndex = useRef<Map<string, number>>(new Map());
 
-	// ---- 追加消息块 ----
 	const appendBlock = useCallback((sessionId: string, block: ContentBlock, toolCallId?: string) => {
 		setMessages((prev) => {
 			const last = prev[prev.length - 1];
@@ -63,7 +61,6 @@ export function App() {
 		});
 	}, []);
 
-	// ---- 处理 ACP 事件 ----
 	const handleEvent = useCallback(
 		(e: AcpEvent) => {
 			if (e.type === "notification") {
@@ -105,7 +102,6 @@ export function App() {
 						respond: e.respond,
 					});
 				} else if (e.method === "fs/read_text_file") {
-					// 文件读取：由主进程 IPC 处理（此处返回空，后续接 realpath 白名单）
 					e.respond({ content: "" });
 				} else if (e.method === "fs/write_text_file") {
 					e.respond({});
@@ -125,7 +121,6 @@ export function App() {
 		[appendBlock, updateToolStatus],
 	);
 
-	// ---- 初始化：启动 agent、握手、载入会话 ----
 	useEffect(() => {
 		const bridge = window.desktop;
 		if (!bridge) {
@@ -150,15 +145,15 @@ export function App() {
 				setStatus(`启动失败：${r.error}`);
 				return;
 			}
-			setStatus("omp 已启动，握手中…");
+			setStatus("握手中…");
 			try {
 				await c.initialize();
 				const s = await bridge.settings.get();
 				const sess = await c.newSession((s as typeof settings).cwd);
-				setSessions([{ id: sess.sessionId, title: "新会话" }]);
+				setSessions([{ id: sess.sessionId, title: "如何对 omp-desktop 项目进行二次开发" }]);
 				setActiveId(sess.sessionId);
 				setConnected(true);
-				setStatus("已连接 omp");
+				setStatus("已连接");
 			} catch (err) {
 				setStatus(`握手失败：${(err as Error).message}`);
 			}
@@ -171,7 +166,6 @@ export function App() {
 		scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
 	}, [messages, permission]);
 
-	// ---- 发送消息 ----
 	const send = async () => {
 		if (!client || !activeId || !input.trim() || running) return;
 		const text = input.trim();
@@ -195,7 +189,7 @@ export function App() {
 		try {
 			const s = await window.desktop.settings.get();
 			const sess = await client.newSession((s as typeof settings).cwd);
-			setSessions((prev) => [...prev, { id: sess.sessionId, title: `会话 ${prev.length + 1}` }]);
+			setSessions((prev) => [...prev, { id: sess.sessionId, title: `新任务 ${prev.length + 1}` }]);
 			setActiveId(sess.sessionId);
 			setMessages([]);
 		} catch (err) {
@@ -206,101 +200,156 @@ export function App() {
 	const saveSettings = async () => {
 		await window.desktop.settings.set(settings);
 		setShowSettings(false);
-		setStatus("设置已保存，重启应用后生效");
+		setStatus("设置已保存，重启后生效");
+	};
+
+	const openDoc = (name: string, content: string) => {
+		setDocs((prev) => (prev.some((d) => d.name === name) ? prev : [...prev, { name, content }]));
+		setActiveDoc(name);
 	};
 
 	return (
-		<div className={`app theme-${settings.theme}`}>
-			<header className="titlebar">
-				<div className="brand">
-					<span className="brand-mark">◈</span>
-					<span className="brand-name">OMP Desktop</span>
-					<span className="brand-sub">powered by oh-my-pi</span>
+		<div className={`wb-app theme-${settings.theme}`}>
+			<header className="wb-titlebar">
+				<div className="wb-traffic">
+					<span className="traffic red" />
+					<span className="traffic yellow" />
+					<span className="traffic green" />
 				</div>
-				<div className="titlebar-actions">
-					<span className={`dot ${connected ? "on" : "off"}`} title={status} />
-					<span className="status-text">{status}</span>
+				<div className="wb-titlebar-center">OMP Desktop</div>
+				<div className="wb-titlebar-right">
+					<span className={`wb-conn ${connected ? "on" : "off"}`} title={status} />
+					<span className="wb-status-text">{status}</span>
 					<button onClick={() => setShowSettings(true)} title="设置">⚙</button>
 				</div>
 			</header>
 
-			<div className="body">
-				<aside className="sidebar">
-					<button className="new-session" onClick={newSession}>＋ 新会话</button>
-					<div className="session-list">
+			<div className="wb-workspace">
+				<aside className="wb-sidebar">
+					<div className="wb-brand">
+						<span className="wb-brand-logo">◈</span>
+						<span className="wb-brand-name">OMP Desktop</span>
+					</div>
+					<nav className="wb-nav">
+						<button className="wb-nav-item primary" onClick={newSession}><span>＋</span> 新建任务</button>
+						<button className="wb-nav-item"><span>☰</span> 规划任务</button>
+						<button className="wb-nav-item"><span>◈</span> 专家与连接器</button>
+						<button className="wb-nav-item"><span>◇</span> 发现</button>
+						<button className="wb-nav-item"><span>▤</span> 资料库</button>
+					</nav>
+					<div className="wb-recent-label">最近</div>
+					<div className="wb-recent-list">
 						{sessions.map((s) => (
 							<button
 								key={s.id}
-								className={`session-item ${s.id === activeId ? "active" : ""}`}
-								onClick={() => { setActiveId(s.id); setMessages([]); }}
+								className={`wb-recent-item ${s.id === activeId ? "active" : ""}`}
+								onClick={() => { setActiveId(s.id); }}
+								title={s.title}
 							>
-								<span className="session-icon">◱</span>
-								<span className="session-title">{s.title}</span>
+								<span className="wb-recent-icon">◱</span>
+								<span>{s.title}</span>
 							</button>
 						))}
 					</div>
-					<div className="sidebar-footer">
-						<div className="footer-row"><span>{sessions.length} 个会话</span></div>
-						<div className="footer-row muted">{settings.cwd}</div>
+					<div className="wb-sidebar-foot">
+						<span className="wb-avatar">Hao</span>
+						<span className="wb-user-name">Hao</span>
+						<span className="wb-user-menu">⋯</span>
 					</div>
 				</aside>
 
-				<main className="main">
-					<div className="messages" ref={scrollRef}>
-						{messages.length === 0 && (
-							<div className="empty">
-								<div className="empty-logo">◈</div>
-								<h2>OMP Desktop</h2>
-								<p>一个 WorkBuddy 风格的 omp 图形工作台</p>
-								<p className="muted">在下方输入任务，omp 会通过 ACP 协议调用工具并在界面中呈现</p>
-							</div>
-						)}
-						{messages.map((m) => (
-							<div key={m.id} className={`message ${m.role}`}>
-								<div className="message-head">
-									<span className="avatar">{m.role === "user" ? "我" : m.role === "agent" ? "◈" : "!"}</span>
-									<span className="role-name">{m.role === "user" ? "你" : m.role === "agent" ? "omp" : "系统"}</span>
-								</div>
-								<div className="message-body">
-									{m.blocks.map((b, i) => (
-										<Block key={i} block={b} />
-									))}
-								</div>
+				<div className="wb-center">
+					<div className="wb-tabbar">
+						<div className="wb-tab active"><span>◱</span> 会话</div>
+						{docs.map((d) => (
+							<div key={d.name} className={`wb-tab ${activeDoc === d.name ? "doc-active" : ""}`} onClick={() => setActiveDoc(d.name)}>
+								<span>{d.name.endsWith(".md") ? "▤" : "⌗"}</span> {d.name}
 							</div>
 						))}
-						{running && <div className="typing">omp 正在思考<span className="dots">…</span></div>}
+						<button className="wb-share" title="分享">↗ 分享</button>
 					</div>
 
-					<div className="composer">
-						<textarea
-							value={input}
-							onChange={(e) => setInput(e.target.value)}
-							onKeyDown={(e) => {
-								if (e.key === "Enter" && !e.shiftKey) {
-									e.preventDefault();
-									send();
-								}
-							}}
-							placeholder={connected ? "给 omp 下达任务…（Enter 发送，Shift+Enter 换行）" : "等待连接 omp…"}
-							disabled={!connected || running}
-						/>
-						<div className="composer-foot">
-							<span className="hint">Enter 发送 · Shift+Enter 换行</span>
-							<button className="send" onClick={send} disabled={!connected || running || !input.trim()}>
-								{running ? "运行中" : "发送 ▲"}
-							</button>
-						</div>
+					<div className="wb-panels">
+						<main className="wb-chat">
+							<div className="wb-chat-head">
+								<span className="wb-chat-title">{sessions.find((s) => s.id === activeId)?.title || "新任务"}</span>
+								<div className="wb-chat-actions">
+									<button title="搜索">⌕</button>
+									<button title="更多">⋯</button>
+								</div>
+							</div>
+							<div className="wb-messages" ref={scrollRef}>
+								{messages.length === 0 && (
+									<div className="wb-empty">
+										<div className="wb-empty-logo">◈</div>
+										<h2>OMP Desktop</h2>
+										<p>WorkBuddy 风格的 omp 图形工作台，基于 ACP 协议</p>
+										<p className="muted">在下方输入任务，omp 会通过工具调用并在界面中呈现</p>
+									</div>
+								)}
+								{messages.map((m) => (
+									<div key={m.id} className={`wb-msg ${m.role}`}>
+										<div className="wb-msg-head">
+											<span className="wb-msg-avatar">{m.role === "user" ? "我" : m.role === "agent" ? "◈" : "!"}</span>
+											<span className="wb-msg-role">{m.role === "user" ? "你" : m.role === "agent" ? "omp" : "系统"}</span>
+										</div>
+										<div className="wb-msg-body">
+											{m.blocks.map((b, i) => <Block key={i} block={b} onOpenDoc={openDoc} />)}
+										</div>
+									</div>
+								))}
+								{running && <div className="wb-typing">omp 正在思考<span className="dots">…</span></div>}
+							</div>
+							<div className="wb-composer">
+								<textarea
+									value={input}
+									onChange={(e) => setInput(e.target.value)}
+									onKeyDown={(e) => {
+										if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+									}}
+									placeholder={connected ? "给 omp 下达任务…  @ 引用文件" : "等待连接 omp…"}
+									disabled={!connected || running}
+								/>
+								<div className="wb-composer-foot">
+									<div className="wb-composer-tools">
+										<button title="添加">＋</button>
+										<button title="引用文件">@</button>
+										<button title="工具">⚒</button>
+										<span className="wb-model">Hy4 flash ▾</span>
+									</div>
+									<button className="wb-send" onClick={send} disabled={!connected || running || !input.trim()}>
+										{running ? "运行中" : "发送 ▲"}
+									</button>
+								</div>
+							</div>
+							<div className="wb-chat-footnote">内容由 AI 生成，请仔细甄别 · <span className="wb-branch">main</span></div>
+						</main>
+
+						<section className="wb-docpanel">
+							<div className="wb-doc-files">
+								{docs.map((d) => (
+									<div key={d.name} className={`wb-doc-file ${activeDoc === d.name ? "active" : ""}`} onClick={() => setActiveDoc(d.name)}>
+										<span>{d.name.endsWith(".md") ? "▤" : "⌗"}</span> {d.name}
+									</div>
+								))}
+							</div>
+							<div className="wb-doc-content">
+								{docs.filter((d) => d.name === activeDoc).map((d) => (
+									<pre key={d.name} className="wb-doc-pre">{d.content}</pre>
+								))}
+							</div>
+						</section>
 					</div>
-				</main>
+				</div>
 			</div>
 
 			{permission && (
-				<div className="modal-backdrop">
-					<div className="modal">
+				<div className="wb-modal-backdrop">
+					<div className="wb-modal">
 						<h3>权限确认</h3>
 						<p>omp 请求执行以下操作：</p>
-						<div className="perm-title">{permission.title}</div>
-						<div className="perm-actions">
+						<div className="wb-perm-title">{permission.title}</div>
+						<div className="wb-perm-actions">
 							{permission.options.map((o) => (
 								<button
 									key={o.optionId}
@@ -316,19 +365,19 @@ export function App() {
 			)}
 
 			{showSettings && (
-				<div className="modal-backdrop">
-					<div className="modal settings">
+				<div className="wb-modal-backdrop">
+					<div className="wb-modal settings">
 						<h3>设置</h3>
 						<label>omp CLI 路径<input value={settings.ompCliPath} onChange={(e) => setSettingsState({ ...settings, ompCliPath: e.target.value })} /></label>
 						<label>bun 路径<input value={settings.bunPath} onChange={(e) => setSettingsState({ ...settings, bunPath: e.target.value })} /></label>
 						<label>工作目录<input value={settings.cwd} onChange={(e) => setSettingsState({ ...settings, cwd: e.target.value })} /></label>
 						<label>主题
 							<select value={settings.theme} onChange={(e) => setSettingsState({ ...settings, theme: e.target.value as "light" | "dark" })}>
-								<option value="dark">深色</option>
 								<option value="light">浅色</option>
+								<option value="dark">深色</option>
 							</select>
 						</label>
-						<div className="perm-actions">
+						<div className="wb-perm-actions">
 							<button className="reject" onClick={() => setShowSettings(false)}>取消</button>
 							<button className="approve" onClick={saveSettings}>保存</button>
 						</div>
@@ -337,7 +386,7 @@ export function App() {
 			)}
 
 			{stderrLog.length > 0 && (
-				<details className="stderr">
+				<details className="wb-stderr">
 					<summary>omp 日志（{stderrLog.length}）</summary>
 					<pre>{stderrLog.join("")}</pre>
 				</details>
@@ -346,20 +395,20 @@ export function App() {
 	);
 }
 
-function Block({ block }: { block: ContentBlock }) {
+function Block({ block, onOpenDoc }: { block: ContentBlock; onOpenDoc: (name: string, content: string) => void }) {
 	if (block.type === "thinking") {
-		return <details className="thinking"><summary>思考过程</summary><pre>{block.text}</pre></details>;
+		return <details className="wb-thinking"><summary>thinking</summary><pre>{block.text}</pre></details>;
 	}
 	if (block.type === "tool_call") {
 		return (
-			<div className={`tool-card ${block.status || "pending"}`}>
-				<span className="tool-status">{block.status === "completed" ? "✓" : block.status === "failed" ? "✗" : "◌"}</span>
-				<span className="tool-name">{block.toolName}</span>
+			<div className={`wb-tool-card ${block.status || "pending"}`}>
+				<span className="wb-tool-status">{block.status === "completed" ? "✓" : block.status === "failed" ? "✗" : "◌"}</span>
+				<span className="wb-tool-name">{block.toolName}</span>
 				{block.status && block.status !== "pending" && block.text !== (block.raw as Record<string, unknown>)?.toolCallId && (
-					<pre className="tool-result">{block.text}</pre>
+					<pre className="wb-tool-result">{block.text}</pre>
 				)}
 			</div>
 		);
 	}
-	return <div className="text-block">{block.text}</div>;
+	return <div className="wb-text-block" onDoubleClick={() => onOpenDoc("untitled.md", block.text)}>{block.text}</div>;
 }
