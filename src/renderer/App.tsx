@@ -6,6 +6,8 @@ import {
 	type ContentBlock,
 	type DesktopSettings,
 	type ThemeMode,
+	type SessionState,
+	normalizeSessionState,
 } from "./acp-client";
 import { DEFAULT_DOCS, type DocFile } from "./docs";
 
@@ -439,6 +441,8 @@ export function App() {
 	const [sidebarView, setSidebarView] = useState<SidebarView>("recent");
 	const [searchOpen, setSearchOpen] = useState(false);
 	const [searchText, setSearchText] = useState("");
+	const [sessionStates, setSessionStates] = useState<Record<string, SessionState>>({});
+	const [modelMenuOpen, setModelMenuOpen] = useState(false);
 
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -543,7 +547,8 @@ export function App() {
 		loadedSessions.current.add(sessionId);
 		setMessagesBySession((prev) => ({ ...prev, [sessionId]: [] }));
 		try {
-			await acp.loadSession(sessionId, cwd);
+			const loaded = await acp.loadSession(sessionId, cwd);
+			setSessionStates((prev) => ({ ...prev, [sessionId]: normalizeSessionState(loaded) }));
 		} catch (error) {
 			setStatus(`恢复会话失败：${(error as Error).message}`);
 		}
@@ -559,6 +564,30 @@ export function App() {
 				const sessionId = (params.sessionId as string) || activeIdRef.current;
 				if (!sessionId) return;
 				const kind = update.sessionUpdate as string;
+
+				if (kind === "current_mode_update") {
+					const modeId = String(update.currentModeId || "");
+					setSessionStates((prev) => {
+						const current = prev[sessionId] || { modes: null, configOptions: [] };
+						return {
+							...prev,
+							[sessionId]: {
+								...current,
+								modes: current.modes ? { ...current.modes, currentModeId: modeId } : null,
+							},
+						};
+					});
+					return;
+				}
+				if (kind === "config_option_update") {
+					const normalized = normalizeSessionState({ configOptions: update.configOptions });
+					setSessionStates((prev) => {
+						const current = prev[sessionId] || { modes: null, configOptions: [] };
+						return { ...prev, [sessionId]: { ...current, configOptions: normalized.configOptions } };
+					});
+					return;
+				}
+
 				const content = update.content as { text?: string } | undefined;
 
 				if (kind === "agent_message_chunk" && content?.text) {
@@ -698,6 +727,7 @@ export function App() {
 					const session = await acp.newSession(loaded.cwd);
 					list = [{ id: session.sessionId, title: "会话 1", cwd: loaded.cwd, ts: Date.now() }];
 					loadedSessions.current.add(session.sessionId);
+					setSessionStates((prev) => ({ ...prev, [session.sessionId]: normalizeSessionState(session) }));
 				}
 
 				setSessions(list);
@@ -797,12 +827,55 @@ export function App() {
 				{ id: session.sessionId, title: `会话 ${sessions.length + 1}`, cwd: loaded.cwd, ts: Date.now() },
 			];
 			loadedSessions.current.add(session.sessionId);
+			setSessionStates((prev) => ({ ...prev, [session.sessionId]: normalizeSessionState(session) }));
 			setSessions(next);
 			void persistSessions(next);
 			setActiveId(session.sessionId);
 			setRunning(false);
 		} catch (error) {
 			setStatus(`新建会话失败：${(error as Error).message}`);
+		}
+	};
+
+	const changeMode = async (modeId: string) => {
+		if (!client || !activeId) return;
+		try {
+			await client.setMode(activeId, modeId);
+			setSessionStates((prev) => {
+				const current = prev[activeId] || { modes: null, configOptions: [] };
+				return {
+					...prev,
+					[activeId]: {
+						...current,
+						modes: current.modes ? { ...current.modes, currentModeId: modeId } : null,
+					},
+				};
+			});
+		} catch (error) {
+			setStatus(`切换档位失败：${(error as Error).message}`);
+		}
+	};
+
+	const changeConfigOption = async (optionId: string, value: string | boolean) => {
+		if (!client || !activeId) return;
+		try {
+			await client.setConfigOption(activeId, optionId, value);
+			setSessionStates((prev) => {
+				const current = prev[activeId] || { modes: null, configOptions: [] };
+				return {
+					...prev,
+					[activeId]: {
+						...current,
+						configOptions: current.configOptions.map((option) =>
+							option.id === optionId
+								? { ...option, currentValue: typeof value === "string" ? value : option.currentValue, currentBoolean: typeof value === "boolean" ? value : option.currentBoolean }
+								: option,
+						),
+					},
+				};
+			});
+		} catch (error) {
+			setStatus(`切换配置失败：${(error as Error).message}`);
 		}
 	};
 
@@ -881,6 +954,12 @@ export function App() {
 	};
 
 	const activeTitle = sessions.find((session) => session.id === activeId)?.title || "新会话";
+	const activeState = activeId ? sessionStates[activeId] : undefined;
+	const modelOption = activeState?.configOptions.find((option) => option.category === "model" || (!option.category && option.options?.some((item) => /gpt|claude|glm|kimi|qwen|deepseek|model/i.test(item.name))));
+	const thoughtOption = activeState?.configOptions.find((option) => option.category === "thought_level");
+	const otherSelects = activeState?.configOptions.filter((option) => option.id !== modelOption?.id && option.id !== thoughtOption?.id) || [];
+	const currentModeName = activeState?.modes?.availableModes.find((mode) => mode.id === activeState.modes?.currentModeId)?.name;
+	const currentModelName = modelOption?.options?.find((item) => item.value === modelOption.currentValue)?.name || modelOption?.currentValue;
 
 	return (
 		<div className="omp-app">
@@ -1138,10 +1217,21 @@ export function App() {
 												<Icon name="folder" size={13} />
 												引用文件
 											</button>
+											{currentModeName && <span className="omp-hint-tag" title="推理档位">{currentModeName}</span>}
 											<span title={settings.cwd}>{shortPath(settings.cwd)}</span>
-											<span className="omp-hint-sep">·</span>
-											<span>Enter 发送，Shift + Enter 换行</span>
 										</div>
+										<div className="omp-composer-tools">
+											<button
+												type="button"
+												className={`omp-model-trigger ${modelMenuOpen ? "active" : ""}`}
+												onClick={() => setModelMenuOpen((value) => !value)}
+												title="模型与推理档位"
+												aria-label="模型与推理档位"
+											>
+												<Icon name="spark" size={13} />
+												<span>{currentModelName || "模型"}</span>
+												<Icon name="chevron" size={12} />
+											</button>
 										{running ? (
 											<button type="button" className="omp-send stop" onClick={cancel} title="停止当前任务">
 												<Icon name="stop" size={13} /> 停止
@@ -1151,7 +1241,78 @@ export function App() {
 												<Icon name="send" size={13} /> 发送
 											</button>
 										)}
+										</div>
 									</div>
+									{modelMenuOpen && (
+										<div className="omp-model-menu">
+											<div className="omp-model-menu-head">
+												<span><Icon name="spark" size={14} /> 模型与推理档位</span>
+												<button type="button" className="omp-icon-button" onClick={() => setModelMenuOpen(false)} title="关闭" aria-label="关闭">
+													<Icon name="close" size={13} />
+												</button>
+											</div>
+											<div className="omp-model-menu-body">
+												{activeState?.modes && activeState.modes.availableModes.length > 0 && (
+													<div className="omp-model-section">
+														<div className="omp-model-section-title">推理档位</div>
+														{activeState.modes.availableModes.map((mode) => (
+															<button key={mode.id} type="button" className={`omp-model-item ${mode.id === activeState.modes?.currentModeId ? "active" : ""}`} onClick={() => void changeMode(mode.id)}>
+																<span>{mode.name}</span>
+																{mode.description && <small>{mode.description}</small>}
+																{mode.id === activeState.modes?.currentModeId && <Icon name="check" size={14} />}
+															</button>
+														))}
+													</div>
+												)}
+												{modelOption && modelOption.options && modelOption.options.length > 0 && (
+													<div className="omp-model-section">
+														<div className="omp-model-section-title">{modelOption.name}</div>
+														{modelOption.options.map((item) => (
+															<button key={item.value} type="button" className={`omp-model-item ${item.value === modelOption.currentValue ? "active" : ""}`} onClick={() => void changeConfigOption(modelOption.id, item.value)}>
+																<span>{item.name}</span>
+																{item.description && <small>{item.description}</small>}
+																{item.value === modelOption.currentValue && <Icon name="check" size={14} />}
+															</button>
+														))}
+													</div>
+												)}
+												{thoughtOption && thoughtOption.options && thoughtOption.options.length > 0 && (
+													<div className="omp-model-section">
+														<div className="omp-model-section-title">{thoughtOption.name}</div>
+														{thoughtOption.options.map((item) => (
+															<button key={item.value} type="button" className={`omp-model-item ${item.value === thoughtOption.currentValue ? "active" : ""}`} onClick={() => void changeConfigOption(thoughtOption.id, item.value)}>
+																<span>{item.name}</span>
+																{item.value === thoughtOption.currentValue && <Icon name="check" size={14} />}
+															</button>
+														))}
+													</div>
+												)}
+												{otherSelects.map((option) => (
+													<div className="omp-model-section" key={option.id}>
+														<div className="omp-model-section-title">{option.name}</div>
+														{option.type === "boolean" ? (
+															<button type="button" className={`omp-model-item ${option.currentBoolean ? "active" : ""}`} onClick={() => void changeConfigOption(option.id, !option.currentBoolean)}>
+																<span>{option.currentBoolean ? "已开启" : "已关闭"}</span>
+															</button>
+														) : (
+															(option.options || []).map((item) => (
+																<button key={item.value} type="button" className={`omp-model-item ${item.value === option.currentValue ? "active" : ""}`} onClick={() => void changeConfigOption(option.id, item.value)}>
+																	<span>{item.name}</span>
+																	{item.value === option.currentValue && <Icon name="check" size={14} />}
+																</button>
+															))
+														)}
+													</div>
+												))}
+												{!activeState?.modes?.availableModes.length && !modelOption && otherSelects.length === 0 && (
+													<div className="omp-model-empty">当前 omp 未提供可切换的模型或档位。<br />可在设置中修改 omp 配置。</div>
+												)}
+											</div>
+											<button type="button" className="omp-model-config" onClick={() => { setModelMenuOpen(false); setShowSettings(true); }}>
+												<Icon name="settings" size={13} /> 配置自定义模型
+											</button>
+										</div>
+									)}
 								</div>
 								<div className="omp-disclaimer">内容由 AI 生成，请核对重要信息</div>
 							</div>

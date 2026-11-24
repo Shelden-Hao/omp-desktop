@@ -96,7 +96,94 @@ export interface PermissionRequest {
 	options: Array<{ optionId: string; name: string; kind: string }>;
 }
 
+/** ACP 会话模式（推理档位等） */
+export interface SessionMode {
+	id: string;
+	name: string;
+	description?: string | null;
+}
+
+export interface SessionModeState {
+	currentModeId: string;
+	availableModes: SessionMode[];
+}
+
+/** ACP 会话配置选项（模型选择等） */
+export interface SessionConfigOption {
+	id: string;
+	name: string;
+	description?: string | null;
+	category?: "mode" | "model" | "model_config" | "thought_level" | string | null;
+	type: "select" | "boolean";
+	currentValue?: string;
+	currentBoolean?: boolean;
+	options?: Array<{ value: string; name: string; description?: string | null }>;
+}
+
+export interface SessionState {
+	modes: SessionModeState | null;
+	configOptions: SessionConfigOption[];
+}
+
 type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void };
+
+function asRecord(value: unknown): Record<string, unknown> {
+	return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+/** 把 ACP 原始 configOptions/modes 规范化，兼容不同 omp 版本的字段差异 */
+export function normalizeSessionState(raw: unknown): SessionState {
+	const source = asRecord(raw);
+	const rawModes = source.modes;
+	let modes: SessionModeState | null = null;
+	if (rawModes && typeof rawModes === "object") {
+		const m = rawModes as Record<string, unknown>;
+		const available = Array.isArray(m.availableModes)
+			? m.availableModes.map((item) => {
+					const mode = asRecord(item);
+					return {
+						id: String(mode.id || ""),
+						name: String(mode.name || mode.id || ""),
+						description: typeof mode.description === "string" ? mode.description : null,
+					};
+				}).filter((mode) => mode.id)
+			: [];
+		modes = { currentModeId: String(m.currentModeId || ""), availableModes: available };
+	}
+	const configOptions = (Array.isArray(source.configOptions) ? source.configOptions : [])
+		.map((item): SessionConfigOption | null => {
+			const option = asRecord(item);
+			const id = String(option.id || "");
+			if (!id) return null;
+			const type = option.type === "boolean" ? "boolean" : "select";
+			const select = asRecord(option);
+			const options = Array.isArray(select.options)
+				? select.options.map((entry) => {
+						const value = asRecord(entry);
+						const grouped = Array.isArray(value.options) ? value.options : [];
+						const flatten = grouped.length
+							? grouped.map((g) => {
+									const group = asRecord(g);
+									return { value: String(group.value || ""), name: String(group.name || group.value || ""), description: typeof group.description === "string" ? group.description : null };
+								})
+							: [{ value: String(value.value || ""), name: String(value.name || value.value || ""), description: typeof value.description === "string" ? value.description : null }];
+						return flatten;
+					}).flat().filter((entry) => entry.value)
+				: [];
+			return {
+				id,
+				name: String(option.name || id),
+				description: typeof option.description === "string" ? option.description : null,
+				category: typeof option.category === "string" ? option.category : null,
+				type,
+				currentValue: typeof option.currentValue === "string" ? option.currentValue : options[0]?.value,
+				currentBoolean: typeof option.currentValue === "boolean" ? option.currentValue : typeof option.currentBoolean === "boolean" ? option.currentBoolean : undefined,
+				options,
+			};
+		})
+		.filter((option): option is SessionConfigOption => Boolean(option));
+	return { modes, configOptions };
+}
 
 export class AcpClient {
 	private nextId = 1;
@@ -210,11 +297,23 @@ export class AcpClient {
 	}
 
 	async newSession(cwd: string) {
-		return this.request("session/new", { cwd, mcpServers: [] }) as Promise<{ sessionId: string }>;
+		const raw = await this.request("session/new", { cwd, mcpServers: [] });
+		return { ...asRecord(raw), sessionId: String(asRecord(raw).sessionId || "") } as { sessionId: string } & Record<string, unknown>;
 	}
 
 	async loadSession(sessionId: string, cwd: string) {
 		return this.request("session/load", { sessionId, cwd, mcpServers: [] });
+	}
+
+	async setMode(sessionId: string, modeId: string) {
+		return this.request("session/set_mode", { sessionId, modeId });
+	}
+
+	async setConfigOption(sessionId: string, configId: string, value: string | boolean) {
+		const payload = typeof value === "boolean"
+			? { type: "boolean", value }
+			: { value };
+		return this.request("session/set_config_option", { sessionId, configId, ...payload });
 	}
 
 	async listSessions() {
