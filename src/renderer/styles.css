@@ -734,6 +734,11 @@ mark {
   background: color-mix(in srgb, var(--warning) 38%, transparent);
   color: inherit;
 }
+mark.omp-search-hit-active {
+  background: #f5a623;
+  color: #1f2328;
+  box-shadow: 0 0 0 2px rgba(245, 166, 35, 0.28);
+}
 
 .omp-content {
   flex: 1;

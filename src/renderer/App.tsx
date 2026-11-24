@@ -517,7 +517,13 @@ function Highlight({ text, query }: { text: string; query: string }) {
 	return (
 		<>
 			{parts.map((part, index) =>
-				part.hit ? <mark key={index}>{part.text}</mark> : <span key={index}>{part.text}</span>,
+				part.hit ? (
+					<mark key={index} data-search-hit>
+						{part.text}
+					</mark>
+				) : (
+					<span key={index}>{part.text}</span>
+				),
 			)}
 		</>
 	);
@@ -708,6 +714,7 @@ export function App() {
 	const [searchOpen, setSearchOpen] = useState(false);
 	const [searchText, setSearchText] = useState("");
 	const [searchIndex, setSearchIndex] = useState(0);
+	const [searchHitCount, setSearchHitCount] = useState(0);
 	const [sessionStates, setSessionStates] = useState<Record<string, SessionState>>({});
 	const [modelMenuOpen, setModelMenuOpen] = useState(false);
 
@@ -721,26 +728,40 @@ export function App() {
 	const cancelledSessionRef = useRef<string | null>(null);
 	const runningRef = useRef(false);
 
-	const messages = activeId ? messagesBySession[activeId] || [] : [];
-	const visibleMessages = searchText.trim()
-		? messages.filter((message) =>
-				message.blocks.some((block) =>
-					block.text.toLowerCase().includes(searchText.trim().toLowerCase()),
-				),
-			)
-		: messages;
+	const messages = useMemo(
+		() => (activeId ? messagesBySession[activeId] || [] : []),
+		[activeId, messagesBySession],
+	);
+	const visibleMessages = messages;
 	const currentDoc = docs.find((doc) => doc.key === activeDoc);
 
 	const jumpSearch = (delta: number) => {
-		if (!visibleMessages.length) return;
-		const next = (searchIndex + delta + visibleMessages.length) % visibleMessages.length;
-		setSearchIndex(next);
-		requestAnimationFrame(() => {
-			document
-				.querySelector(`[data-message-id="${visibleMessages[next].id}"]`)
-				?.scrollIntoView({ block: "center", behavior: "smooth" });
-		});
+		if (!searchHitCount) return;
+		setSearchIndex((current) => (current + delta + searchHitCount) % searchHitCount);
 	};
+
+	useEffect(() => {
+		if (!searchOpen || !searchText.trim()) {
+			setSearchHitCount(0);
+			return;
+		}
+		const marks = document.querySelectorAll("mark[data-search-hit]");
+		setSearchHitCount(marks.length);
+		setSearchIndex((current) => (marks.length ? current % marks.length : 0));
+	}, [searchOpen, searchText, messages]);
+
+	useEffect(() => {
+		const marks = Array.from(document.querySelectorAll<HTMLElement>("mark[data-search-hit]"));
+		marks.forEach((mark) => mark.classList.remove("omp-search-hit-active"));
+		if (!searchOpen || !searchText.trim() || !marks.length) return;
+		const active = marks[searchIndex % marks.length];
+		active.classList.add("omp-search-hit-active");
+		const fold = active.closest("details.omp-process-fold");
+		if (fold) fold.setAttribute("open", "");
+		requestAnimationFrame(() => {
+			active.scrollIntoView({ block: "center", behavior: "smooth" });
+		});
+	}, [searchOpen, searchText, searchIndex, searchHitCount]);
 
 	useEffect(() => {
 		activeIdRef.current = activeId;
@@ -1626,14 +1647,14 @@ export function App() {
 									/>
 									{searchText && (
 										<span className="omp-search-count">
-											{visibleMessages.length ? searchIndex + 1 : 0}/{visibleMessages.length}
+											{searchHitCount ? searchIndex + 1 : 0}/{searchHitCount}
 										</span>
 									)}
 									<button
 										type="button"
 										className="omp-search-nav"
 										onClick={() => jumpSearch(-1)}
-										disabled={!visibleMessages.length}
+										disabled={!searchHitCount}
 										title="上一处"
 										aria-label="上一处搜索结果"
 									>
@@ -1643,7 +1664,7 @@ export function App() {
 										type="button"
 										className="omp-search-nav"
 										onClick={() => jumpSearch(1)}
-										disabled={!visibleMessages.length}
+										disabled={!searchHitCount}
 										title="下一处"
 										aria-label="下一处搜索结果"
 									>
