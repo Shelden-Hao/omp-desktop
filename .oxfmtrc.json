@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "useTabs": false,
+  "tabWidth": 2,
+  "singleQuote": false,
+  "semi": true,
+  "trailingComma": "all",
+  "printWidth": 100,
+  "endOfLine": "lf",
+  "ignorePatterns": ["dist/**", "node_modules/**", "out/**", "*.min.js"],
+  "overrides": [
+    {
+      "files": ["src/main/**/*.ts", "src/preload/**/*.ts", "src/renderer/**/*.tsx"],
+      "options": { "useTabs": true }
+    }
+  ]
+}

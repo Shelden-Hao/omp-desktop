@@ -1,7 +1,15 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme } from "electron";
-import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	readdirSync,
+	realpathSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 
@@ -181,7 +189,11 @@ function appendTerminalOutput(session: TerminalSession, chunk: string) {
 	session.truncated = true;
 }
 
-function markTerminalExited(session: TerminalSession, exitCode: number | null, signal: string | null) {
+function markTerminalExited(
+	session: TerminalSession,
+	exitCode: number | null,
+	signal: string | null,
+) {
 	session.exitCode = exitCode;
 	session.signal = signal;
 	for (const resolveWaiter of session.waiters) resolveWaiter();
@@ -200,14 +212,22 @@ function releaseAllTerminals() {
 function acpTerminalCreate(params: Record<string, unknown>): ToolResult {
 	try {
 		if (typeof params.command !== "string" || !params.command) throw new Error("缺少命令");
-		const args = Array.isArray(params.args) ? params.args.filter((item): item is string => typeof item === "string") : [];
+		const args = Array.isArray(params.args)
+			? params.args.filter((item): item is string => typeof item === "string")
+			: [];
 		const workspace = resolve(settings.cwd);
-		const cwd = typeof params.cwd === "string" && params.cwd ? resolveWorkspacePath(params.cwd) : workspace;
+		const cwd =
+			typeof params.cwd === "string" && params.cwd ? resolveWorkspacePath(params.cwd) : workspace;
 		const env: NodeJS.ProcessEnv = { ...process.env };
 		delete env.ELECTRON_RUN_AS_NODE;
 		if (Array.isArray(params.env)) {
 			for (const item of params.env) {
-				if (item && typeof item === "object" && typeof item.name === "string" && typeof item.value === "string") {
+				if (
+					item &&
+					typeof item === "object" &&
+					typeof item.name === "string" &&
+					typeof item.value === "string"
+				) {
 					env[item.name] = item.value;
 				}
 			}
@@ -330,7 +350,8 @@ function findBun(home: string, npmGlobal: string): string {
 	const fromPath = (process.env.PATH || "").split(/[;:]/).map((dir) => dir.replace(/^"|"$/g, ""));
 	const candidates: string[] = [];
 	for (const dir of fromPath) {
-		if (/node\/versions/i.test(dir)) candidates.push(join(dir, "node_modules", "bun", "bin", "bun.exe"));
+		if (/node\/versions/i.test(dir))
+			candidates.push(join(dir, "node_modules", "bun", "bin", "bun.exe"));
 		candidates.push(join(dir, "bun.exe"));
 	}
 	// WorkBuddy / nvm4w 等会把 bun 装在版本化 node 目录里，逐个扫描。
@@ -347,10 +368,7 @@ function findBun(home: string, npmGlobal: string): string {
 			// 目录不存在则跳过
 		}
 	}
-	candidates.push(
-		join(home, ".bun", "bin", "bun.exe"),
-		join(npmGlobal, "bun", "bin", "bun.exe"),
-	);
+	candidates.push(join(home, ".bun", "bin", "bun.exe"), join(npmGlobal, "bun", "bin", "bun.exe"));
 	return firstExisting(candidates);
 }
 
@@ -361,7 +379,17 @@ function defaultSettings(): AppSettings {
 		: process.env.npm_config_prefix || join(home, "AppData", "Roaming", "npm");
 	return {
 		ompCliPath: firstExisting([
-			join(home, ".bun", "install", "global", "node_modules", "@oh-my-pi", "pi-coding-agent", "dist", "cli.js"),
+			join(
+				home,
+				".bun",
+				"install",
+				"global",
+				"node_modules",
+				"@oh-my-pi",
+				"pi-coding-agent",
+				"dist",
+				"cli.js",
+			),
 			join(npmGlobal, "node_modules", "@oh-my-pi", "pi-coding-agent", "dist", "cli.js"),
 		]),
 		bunPath: findBun(home, npmGlobal),
@@ -404,12 +432,13 @@ function loadSessions(): StoredSession[] {
 		const parsed: unknown = JSON.parse(readFileSync(SESSIONS_PATH, "utf8"));
 		if (!Array.isArray(parsed)) return [];
 		return parsed
-			.filter((item): item is StoredSession =>
-				Boolean(item) &&
-				typeof item === "object" &&
-				typeof item.id === "string" &&
-				typeof item.title === "string" &&
-				typeof item.cwd === "string",
+			.filter(
+				(item): item is StoredSession =>
+					Boolean(item) &&
+					typeof item === "object" &&
+					typeof item.id === "string" &&
+					typeof item.title === "string" &&
+					typeof item.cwd === "string",
 			)
 			.map((item) => ({ id: item.id, title: item.title, cwd: item.cwd, ts: item.ts }));
 	} catch {
@@ -548,7 +577,46 @@ app.whenReady().then(() => {
 			filters: [
 				{
 					name: "文本与代码文件",
-					extensions: ["js", "jsx", "mjs", "cjs", "ts", "tsx", "json", "jsonc", "md", "mdx", "css", "scss", "less", "html", "htm", "vue", "py", "rb", "go", "rs", "java", "kt", "c", "h", "cpp", "hpp", "cs", "php", "sh", "bash", "ps1", "yml", "yaml", "toml", "ini", "sql", "txt", "env"],
+					extensions: [
+						"js",
+						"jsx",
+						"mjs",
+						"cjs",
+						"ts",
+						"tsx",
+						"json",
+						"jsonc",
+						"md",
+						"mdx",
+						"css",
+						"scss",
+						"less",
+						"html",
+						"htm",
+						"vue",
+						"py",
+						"rb",
+						"go",
+						"rs",
+						"java",
+						"kt",
+						"c",
+						"h",
+						"cpp",
+						"hpp",
+						"cs",
+						"php",
+						"sh",
+						"bash",
+						"ps1",
+						"yml",
+						"yaml",
+						"toml",
+						"ini",
+						"sql",
+						"txt",
+						"env",
+					],
 				},
 				{ name: "所有文件", extensions: ["*"] },
 			],
@@ -559,7 +627,10 @@ app.whenReady().then(() => {
 
 	ipcMain.handle("file:read", (_e, filePath: string) => readTextDocument(filePath));
 
-	const acpToolHandlers: Record<string, (params: Record<string, unknown>) => ToolResult | Promise<ToolResult>> = {
+	const acpToolHandlers: Record<
+		string,
+		(params: Record<string, unknown>) => ToolResult | Promise<ToolResult>
+	> = {
 		"acp:fs-read": acpFsRead,
 		"acp:fs-write": acpFsWrite,
 		"acp:terminal-create": acpTerminalCreate,

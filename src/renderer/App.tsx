@@ -107,7 +107,11 @@ function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
 	};
 	switch (name) {
 		case "plus":
-			return <svg {...common}><path d="M12 5v14M5 12h14" /></svg>;
+			return (
+				<svg {...common}>
+					<path d="M12 5v14M5 12h14" />
+				</svg>
+			);
 		case "settings":
 			return (
 				<svg {...common}>
@@ -123,7 +127,11 @@ function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
 				</svg>
 			);
 		case "moon":
-			return <svg {...common}><path d="M20.5 14.2A8.5 8.5 0 1 1 9.8 3.5a6.7 6.7 0 0 0 10.7 10.7Z" /></svg>;
+			return (
+				<svg {...common}>
+					<path d="M20.5 14.2A8.5 8.5 0 1 1 9.8 3.5a6.7 6.7 0 0 0 10.7 10.7Z" />
+				</svg>
+			);
 		case "monitor":
 			return (
 				<svg {...common}>
@@ -132,45 +140,134 @@ function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
 				</svg>
 			);
 		case "folder":
-			return <svg {...common}><path d="M3 7.5h6.2l2 2H21v9.5H3z" /></svg>;
+			return (
+				<svg {...common}>
+					<path d="M3 7.5h6.2l2 2H21v9.5H3z" />
+				</svg>
+			);
 		case "file":
-			return <svg {...common}><path d="M6 3h8l4 4v14H6zM14 3v5h4" /></svg>;
+			return (
+				<svg {...common}>
+					<path d="M6 3h8l4 4v14H6zM14 3v5h4" />
+				</svg>
+			);
 		case "close":
-			return <svg {...common}><path d="M6 6l12 12M18 6 6 18" /></svg>;
+			return (
+				<svg {...common}>
+					<path d="M6 6l12 12M18 6 6 18" />
+				</svg>
+			);
 		case "send":
-			return <svg {...common}><path d="M4 12 20 4l-6.5 16-2.7-6.8L4 12Z" /></svg>;
+			return (
+				<svg {...common}>
+					<path d="M4 12 20 4l-6.5 16-2.7-6.8L4 12Z" />
+				</svg>
+			);
 		case "stop":
-			return <svg {...common}><rect x="6" y="6" width="12" height="12" rx="2" /></svg>;
+			return (
+				<svg {...common}>
+					<rect x="6" y="6" width="12" height="12" rx="2" />
+				</svg>
+			);
 		case "chevron":
-			return <svg {...common}><path d="m6 9 6 6 6-6" /></svg>;
+			return (
+				<svg {...common}>
+					<path d="m6 9 6 6 6-6" />
+				</svg>
+			);
 		case "panel":
-			return <svg {...common}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M15 4v16" /></svg>;
+			return (
+				<svg {...common}>
+					<rect x="3" y="4" width="18" height="16" rx="2" />
+					<path d="M15 4v16" />
+				</svg>
+			);
 		case "refresh":
-			return <svg {...common}><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5" /></svg>;
+			return (
+				<svg {...common}>
+					<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5" />
+				</svg>
+			);
 		case "copy":
-			return <svg {...common}><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></svg>;
+			return (
+				<svg {...common}>
+					<rect x="8" y="8" width="12" height="12" rx="2" />
+					<path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+				</svg>
+			);
 		case "check":
-			return <svg {...common}><path d="m5 12 4.5 4.5L19 7" /></svg>;
+			return (
+				<svg {...common}>
+					<path d="m5 12 4.5 4.5L19 7" />
+				</svg>
+			);
 		case "spark":
-			return <svg {...common}><path d="m12 3 2.1 6.9L21 12l-6.9 2.1L12 21l-2.1-6.9L3 12l6.9-2.1L12 3Z" /></svg>;
+			return (
+				<svg {...common}>
+					<path d="m12 3 2.1 6.9L21 12l-6.9 2.1L12 21l-2.1-6.9L3 12l6.9-2.1L12 3Z" />
+				</svg>
+			);
 		case "warning":
-			return <svg {...common}><path d="M12 3 2.5 20h19L12 3ZM12 9v5M12 17.5v.5" /></svg>;
+			return (
+				<svg {...common}>
+					<path d="M12 3 2.5 20h19L12 3ZM12 9v5M12 17.5v.5" />
+				</svg>
+			);
 		case "search":
-			return <svg {...common}><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>;
+			return (
+				<svg {...common}>
+					<circle cx="11" cy="11" r="7" />
+					<path d="m20 20-4-4" />
+				</svg>
+			);
 		case "chat":
-			return <svg {...common}><path d="M20 15a2 2 0 0 1-2 2H8l-4 3V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2Z" /></svg>;
+			return (
+				<svg {...common}>
+					<path d="M20 15a2 2 0 0 1-2 2H8l-4 3V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2Z" />
+				</svg>
+			);
 		case "grid":
-			return <svg {...common}><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>;
+			return (
+				<svg {...common}>
+					<rect x="3" y="3" width="7" height="7" rx="1.5" />
+					<rect x="14" y="3" width="7" height="7" rx="1.5" />
+					<rect x="3" y="14" width="7" height="7" rx="1.5" />
+					<rect x="14" y="14" width="7" height="7" rx="1.5" />
+				</svg>
+			);
 		case "clock":
-			return <svg {...common}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>;
+			return (
+				<svg {...common}>
+					<circle cx="12" cy="12" r="9" />
+					<path d="M12 7v5l3 2" />
+				</svg>
+			);
 		case "layers":
-			return <svg {...common}><path d="m12 3 9 5-9 5-9-5 9-5ZM3 13l9 5 9-5" /></svg>;
+			return (
+				<svg {...common}>
+					<path d="m12 3 9 5-9 5-9-5 9-5ZM3 13l9 5 9-5" />
+				</svg>
+			);
 		case "chevron-right":
-			return <svg {...common}><path d="m9 6 6 6-6 6" /></svg>;
+			return (
+				<svg {...common}>
+					<path d="m9 6 6 6-6 6" />
+				</svg>
+			);
 		case "more":
-			return <svg {...common}><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></svg>;
+			return (
+				<svg {...common}>
+					<circle cx="5" cy="12" r="1" />
+					<circle cx="12" cy="12" r="1" />
+					<circle cx="19" cy="12" r="1" />
+				</svg>
+			);
 		case "rotate":
-			return <svg {...common}><path d="M3 12a9 9 0 1 0 2.6-6.4L3 8M3 3v5h5" /></svg>;
+			return (
+				<svg {...common}>
+					<path d="M3 12a9 9 0 1 0 2.6-6.4L3 8M3 3v5h5" />
+				</svg>
+			);
 	}
 }
 
@@ -246,12 +343,24 @@ function InlineText({ text, query = "" }: { text: string; query?: string }) {
 		<>
 			{parts.map((part, index) => {
 				if (part.startsWith("`") && part.endsWith("`")) {
-					return <code key={index}><Highlight text={part.slice(1, -1)} query={query} /></code>;
+					return (
+						<code key={index}>
+							<Highlight text={part.slice(1, -1)} query={query} />
+						</code>
+					);
 				}
 				if (part.startsWith("**") && part.endsWith("**")) {
-					return <strong key={index}><Highlight text={part.slice(2, -2)} query={query} /></strong>;
+					return (
+						<strong key={index}>
+							<Highlight text={part.slice(2, -2)} query={query} />
+						</strong>
+					);
 				}
-				return <span key={index}><Highlight text={part} query={query} /></span>;
+				return (
+					<span key={index}>
+						<Highlight text={part} query={query} />
+					</span>
+				);
 			})}
 		</>
 	);
@@ -295,31 +404,53 @@ function CodeBlock({
 					)}
 				</div>
 			</div>
-			<pre><code>{code}</code></pre>
+			<pre>
+				<code>{code}</code>
+			</pre>
 		</div>
 	);
 }
 
-function Markdown({ text, onOpen, query = "" }: { text: string; onOpen: (name: string, content: string) => void; query?: string }) {
+function Markdown({
+	text,
+	onOpen,
+	query = "",
+}: {
+	text: string;
+	onOpen: (name: string, content: string) => void;
+	query?: string;
+}) {
 	const blocks = useMemo(() => parseMarkdown(text), [text]);
 	return (
 		<div className="omp-markdown">
 			{blocks.map((block, index) => {
 				if (block.type === "heading") {
 					const Tag = `h${Math.min(block.level + 1, 6)}` as "h2" | "h3" | "h4" | "h5" | "h6";
-					return <Tag key={index}><InlineText text={block.text} query={query} /></Tag>;
+					return (
+						<Tag key={index}>
+							<InlineText text={block.text} query={query} />
+						</Tag>
+					);
 				}
 				if (block.type === "list") {
 					return (
 						<ul key={index}>
-							{block.items.map((item, itemIndex) => <li key={itemIndex}><InlineText text={item} query={query} /></li>)}
+							{block.items.map((item, itemIndex) => (
+								<li key={itemIndex}>
+									<InlineText text={item} query={query} />
+								</li>
+							))}
 						</ul>
 					);
 				}
 				if (block.type === "code") {
 					return <CodeBlock key={index} code={block.text} lang={block.lang} onOpen={onOpen} />;
 				}
-				return <p key={index}><InlineText text={block.text} query={query} /></p>;
+				return (
+					<p key={index}>
+						<InlineText text={block.text} query={query} />
+					</p>
+				);
 			})}
 		</div>
 	);
@@ -339,7 +470,13 @@ function Highlight({ text, query }: { text: string; query: string }) {
 		found = lower.indexOf(target, cursor);
 	}
 	if (cursor < text.length) parts.push({ text: text.slice(cursor), hit: false });
-	return <>{parts.map((part, index) => part.hit ? <mark key={index}>{part.text}</mark> : <span key={index}>{part.text}</span>)}</>;
+	return (
+		<>
+			{parts.map((part, index) =>
+				part.hit ? <mark key={index}>{part.text}</mark> : <span key={index}>{part.text}</span>,
+			)}
+		</>
+	);
 }
 
 function MessageActions({ text, onRetry }: { text: string; onRetry?: () => void }) {
@@ -375,12 +512,24 @@ const TOOL_STATUS: Record<string, { label: string; icon: IconName }> = {
 	failed: { label: "失败", icon: "warning" },
 };
 
-function Block({ block, onOpenDoc, query = "" }: { block: ContentBlock; onOpenDoc: (name: string, content: string) => void; query?: string }) {
+function Block({
+	block,
+	onOpenDoc,
+	query = "",
+}: {
+	block: ContentBlock;
+	onOpenDoc: (name: string, content: string) => void;
+	query?: string;
+}) {
 	if (block.type === "thinking") {
 		return (
 			<details className="omp-thinking">
-				<summary><Icon name="spark" size={13} /> 思考过程</summary>
-				<div className="omp-thinking-body"><Markdown text={block.text} onOpen={onOpenDoc} query={query} /></div>
+				<summary>
+					<Icon name="spark" size={13} /> 思考过程
+				</summary>
+				<div className="omp-thinking-body">
+					<Markdown text={block.text} onOpen={onOpenDoc} query={query} />
+				</div>
 			</details>
 		);
 	}
@@ -389,11 +538,14 @@ function Block({ block, onOpenDoc, query = "" }: { block: ContentBlock; onOpenDo
 		const status = TOOL_STATUS[block.status || "pending"];
 		const raw = block.raw as Record<string, unknown> | undefined;
 		const title = typeof raw?.title === "string" ? raw.title : "";
-		const hasResult = block.status !== "pending" && block.text !== raw?.toolCallId && block.text.length > 0;
+		const hasResult =
+			block.status !== "pending" && block.text !== raw?.toolCallId && block.text.length > 0;
 		return (
 			<div className={`omp-tool-card ${block.status || "pending"}`}>
 				<div className="omp-tool-main">
-					<span className="omp-tool-icon"><Icon name={status.icon} size={14} /></span>
+					<span className="omp-tool-icon">
+						<Icon name={status.icon} size={14} />
+					</span>
 					<div className="omp-tool-copy">
 						<div className="omp-tool-title">{block.toolName}</div>
 						{title && <div className="omp-tool-subtitle">{title}</div>}
@@ -454,7 +606,11 @@ export function App() {
 
 	const messages = activeId ? messagesBySession[activeId] || [] : [];
 	const visibleMessages = searchText.trim()
-		? messages.filter((message) => message.blocks.some((block) => block.text.toLowerCase().includes(searchText.trim().toLowerCase())))
+		? messages.filter((message) =>
+				message.blocks.some((block) =>
+					block.text.toLowerCase().includes(searchText.trim().toLowerCase()),
+				),
+			)
 		: messages;
 	const currentDoc = docs.find((doc) => doc.key === activeDoc);
 
@@ -471,7 +627,8 @@ export function App() {
 		root.dataset.theme = settings.theme;
 		const media = window.matchMedia("(prefers-color-scheme: dark)");
 		const apply = () => {
-			root.dataset.resolvedTheme = settings.theme === "system" ? (media.matches ? "dark" : "light") : settings.theme;
+			root.dataset.resolvedTheme =
+				settings.theme === "system" ? (media.matches ? "dark" : "light") : settings.theme;
 		};
 		apply();
 		media.addEventListener("change", apply);
@@ -485,9 +642,12 @@ export function App() {
 		el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
 	}, [input]);
 
-	const updateMessages = useCallback((sessionId: string, updater: (prev: ChatMessage[]) => ChatMessage[]) => {
-		setMessagesBySession((prev) => ({ ...prev, [sessionId]: updater(prev[sessionId] || []) }));
-	}, []);
+	const updateMessages = useCallback(
+		(sessionId: string, updater: (prev: ChatMessage[]) => ChatMessage[]) => {
+			setMessagesBySession((prev) => ({ ...prev, [sessionId]: updater(prev[sessionId] || []) }));
+		},
+		[],
+	);
 
 	const appendBlock = useCallback(
 		(sessionId: string, block: ContentBlock, toolCallId?: string) => {
@@ -517,7 +677,9 @@ export function App() {
 				copy[index] = {
 					...message,
 					blocks: message.blocks.map((block) =>
-						block.toolName && block.text === toolCallId ? { ...block, status: next, text: result || block.text } : block,
+						block.toolName && block.text === toolCallId
+							? { ...block, status: next, text: result || block.text }
+							: block,
 					),
 				};
 				return copy;
@@ -583,7 +745,10 @@ export function App() {
 					const normalized = normalizeSessionState({ configOptions: update.configOptions });
 					setSessionStates((prev) => {
 						const current = prev[sessionId] || { modes: null, configOptions: [] };
-						return { ...prev, [sessionId]: { ...current, configOptions: normalized.configOptions } };
+						return {
+							...prev,
+							[sessionId]: { ...current, configOptions: normalized.configOptions },
+						};
 					});
 					return;
 				}
@@ -612,7 +777,12 @@ export function App() {
 					const next = update.status as string;
 					if (next === "completed" || next === "failed") {
 						const result = (update.content as { text?: string } | undefined)?.text;
-						updateToolStatus(sessionId, toolCallId, next === "completed" ? "completed" : "failed", result);
+						updateToolStatus(
+							sessionId,
+							toolCallId,
+							next === "completed" ? "completed" : "failed",
+							result,
+						);
 					}
 				}
 				return;
@@ -624,7 +794,8 @@ export function App() {
 				setPermission({
 					sessionId: (params.sessionId as string) || "",
 					title: toolCall?.title || "请求执行操作",
-					options: (params.options as Array<{ optionId: string; name: string; kind: string }>) || [],
+					options:
+						(params.options as Array<{ optionId: string; name: string; kind: string }>) || [],
 					respond: event.respond,
 				});
 				return;
@@ -727,7 +898,10 @@ export function App() {
 					const session = await acp.newSession(loaded.cwd);
 					list = [{ id: session.sessionId, title: "会话 1", cwd: loaded.cwd, ts: Date.now() }];
 					loadedSessions.current.add(session.sessionId);
-					setSessionStates((prev) => ({ ...prev, [session.sessionId]: normalizeSessionState(session) }));
+					setSessionStates((prev) => ({
+						...prev,
+						[session.sessionId]: normalizeSessionState(session),
+					}));
 				}
 
 				setSessions(list);
@@ -780,7 +954,9 @@ export function App() {
 		} finally {
 			if (cancelledSessionRef.current === sessionId) cancelledSessionRef.current = null;
 			updateMessages(sessionId, (prev) =>
-				prev.map((item) => (item.id === userMessageId ? { ...item, durationMs: Date.now() - startedAt } : item)),
+				prev.map((item) =>
+					item.id === userMessageId ? { ...item, durationMs: Date.now() - startedAt } : item,
+				),
 			);
 			setRunning(false);
 			inputRef.current?.focus();
@@ -824,10 +1000,18 @@ export function App() {
 			const session = await client.newSession(loaded.cwd);
 			const next: Session[] = [
 				...sessions,
-				{ id: session.sessionId, title: `会话 ${sessions.length + 1}`, cwd: loaded.cwd, ts: Date.now() },
+				{
+					id: session.sessionId,
+					title: `会话 ${sessions.length + 1}`,
+					cwd: loaded.cwd,
+					ts: Date.now(),
+				},
 			];
 			loadedSessions.current.add(session.sessionId);
-			setSessionStates((prev) => ({ ...prev, [session.sessionId]: normalizeSessionState(session) }));
+			setSessionStates((prev) => ({
+				...prev,
+				[session.sessionId]: normalizeSessionState(session),
+			}));
 			setSessions(next);
 			void persistSessions(next);
 			setActiveId(session.sessionId);
@@ -868,7 +1052,11 @@ export function App() {
 						...current,
 						configOptions: current.configOptions.map((option) =>
 							option.id === optionId
-								? { ...option, currentValue: typeof value === "string" ? value : option.currentValue, currentBoolean: typeof value === "boolean" ? value : option.currentBoolean }
+								? {
+										...option,
+										currentValue: typeof value === "string" ? value : option.currentValue,
+										currentBoolean: typeof value === "boolean" ? value : option.currentBoolean,
+									}
 								: option,
 						),
 					},
@@ -937,7 +1125,9 @@ export function App() {
 			const file = await window.desktop.files.read(currentDoc.path);
 			setDocs((prev) =>
 				prev.map((doc) =>
-					doc.key === currentDoc.key ? { ...doc, content: file.content, language: file.language } : doc,
+					doc.key === currentDoc.key
+						? { ...doc, content: file.content, language: file.language }
+						: doc,
 				),
 			);
 		} catch (error) {
@@ -955,17 +1145,33 @@ export function App() {
 
 	const activeTitle = sessions.find((session) => session.id === activeId)?.title || "新会话";
 	const activeState = activeId ? sessionStates[activeId] : undefined;
-	const modelOption = activeState?.configOptions.find((option) => option.category === "model" || (!option.category && option.options?.some((item) => /gpt|claude|glm|kimi|qwen|deepseek|model/i.test(item.name))));
-	const thoughtOption = activeState?.configOptions.find((option) => option.category === "thought_level");
-	const otherSelects = activeState?.configOptions.filter((option) => option.id !== modelOption?.id && option.id !== thoughtOption?.id) || [];
-	const currentModeName = activeState?.modes?.availableModes.find((mode) => mode.id === activeState.modes?.currentModeId)?.name;
-	const currentModelName = modelOption?.options?.find((item) => item.value === modelOption.currentValue)?.name || modelOption?.currentValue;
+	const modelOption = activeState?.configOptions.find(
+		(option) =>
+			option.category === "model" ||
+			(!option.category &&
+				option.options?.some((item) => /gpt|claude|glm|kimi|qwen|deepseek|model/i.test(item.name))),
+	);
+	const thoughtOption = activeState?.configOptions.find(
+		(option) => option.category === "thought_level",
+	);
+	const otherSelects =
+		activeState?.configOptions.filter(
+			(option) => option.id !== modelOption?.id && option.id !== thoughtOption?.id,
+		) || [];
+	const currentModeName = activeState?.modes?.availableModes.find(
+		(mode) => mode.id === activeState.modes?.currentModeId,
+	)?.name;
+	const currentModelName =
+		modelOption?.options?.find((item) => item.value === modelOption.currentValue)?.name ||
+		modelOption?.currentValue;
 
 	return (
 		<div className="omp-app">
 			<header className="omp-titlebar">
 				<div className="omp-titlebar-left">
-					<span className="omp-logo"><Icon name="spark" size={15} /></span>
+					<span className="omp-logo">
+						<Icon name="spark" size={15} />
+					</span>
 					<span className="omp-product">OMP Desktop</span>
 					<span className="omp-title-divider" />
 					<span className="omp-tagline">Coding Agent Shell</span>
@@ -985,11 +1191,20 @@ export function App() {
 								title={THEME_LABEL[mode]}
 								aria-label={THEME_LABEL[mode]}
 							>
-								<Icon name={mode === "light" ? "sun" : mode === "dark" ? "moon" : "monitor"} size={14} />
+								<Icon
+									name={mode === "light" ? "sun" : mode === "dark" ? "moon" : "monitor"}
+									size={14}
+								/>
 							</button>
 						))}
 					</div>
-					<button type="button" className="omp-icon-button" onClick={() => setShowSettings(true)} title="设置" aria-label="设置">
+					<button
+						type="button"
+						className="omp-icon-button"
+						onClick={() => setShowSettings(true)}
+						title="设置"
+						aria-label="设置"
+					>
 						<Icon name="settings" size={15} />
 					</button>
 				</div>
@@ -998,13 +1213,28 @@ export function App() {
 			<div className="omp-workspace">
 				<aside className="omp-sidebar">
 					<div className="omp-sidebar-nav">
-						<button type="button" className="omp-nav-primary" onClick={newSession} disabled={!connected}>
+						<button
+							type="button"
+							className="omp-nav-primary"
+							onClick={newSession}
+							disabled={!connected}
+						>
 							<Icon name="plus" size={16} />
 							<span>新建任务</span>
 						</button>
-						<div className="omp-nav-static"><Icon name="chat" size={16} /><span>助理</span><em>本地</em></div>
-						<button type="button" className="omp-nav-static" onClick={() => setShowSettings(true)} title="MCP 与扩展在设置中配置">
-							<Icon name="layers" size={16} /><span>技能与连接器</span>
+						<div className="omp-nav-static">
+							<Icon name="chat" size={16} />
+							<span>助理</span>
+							<em>本地</em>
+						</div>
+						<button
+							type="button"
+							className="omp-nav-static"
+							onClick={() => setShowSettings(true)}
+							title="MCP 与扩展在设置中配置"
+						>
+							<Icon name="layers" size={16} />
+							<span>技能与连接器</span>
 						</button>
 					</div>
 
@@ -1093,7 +1323,11 @@ export function App() {
 							<Icon name="folder" size={14} />
 							<span>{shortPath(settings.cwd)}</span>
 						</div>
-						<button type="button" className="omp-sidebar-setting" onClick={() => setShowSettings(true)}>
+						<button
+							type="button"
+							className="omp-sidebar-setting"
+							onClick={() => setShowSettings(true)}
+						>
 							<Icon name="settings" size={14} />
 							设置
 						</button>
@@ -1102,13 +1336,20 @@ export function App() {
 
 				<main className="omp-main">
 					<div className="omp-topbar">
-						<strong className="omp-topbar-title" title={activeTitle}>{activeTitle}</strong>
+						<strong className="omp-topbar-title" title={activeTitle}>
+							{activeTitle}
+						</strong>
 						<div className="omp-topbar-actions">
-							<span className="omp-topbar-status" title={status}>{status}</span>
+							<span className="omp-topbar-status" title={status}>
+								{status}
+							</span>
 							<button
 								type="button"
 								className={`omp-icon-button ${searchOpen ? "active" : ""}`}
-								onClick={() => { setSearchOpen((value) => !value); if (searchOpen) setSearchText(""); }}
+								onClick={() => {
+									setSearchOpen((value) => !value);
+									if (searchOpen) setSearchText("");
+								}}
 								title="搜索当前会话"
 								aria-label="搜索当前会话"
 							>
@@ -1135,8 +1376,26 @@ export function App() {
 								placeholder="在当前会话中搜索…"
 								aria-label="搜索当前会话消息"
 							/>
-							{searchText && <span className="omp-search-count">{messages.filter((m) => m.blocks.some((b) => b.text.toLowerCase().includes(searchText.toLowerCase()))).length} 条结果</span>}
-							<button type="button" className="omp-icon-button" onClick={() => { setSearchOpen(false); setSearchText(""); }} title="关闭搜索" aria-label="关闭搜索">
+							{searchText && (
+								<span className="omp-search-count">
+									{
+										messages.filter((m) =>
+											m.blocks.some((b) => b.text.toLowerCase().includes(searchText.toLowerCase())),
+										).length
+									}{" "}
+									条结果
+								</span>
+							)}
+							<button
+								type="button"
+								className="omp-icon-button"
+								onClick={() => {
+									setSearchOpen(false);
+									setSearchText("");
+								}}
+								title="关闭搜索"
+								aria-label="关闭搜索"
+							>
 								<Icon name="close" size={14} />
 							</button>
 						</div>
@@ -1147,36 +1406,74 @@ export function App() {
 							<div className="omp-messages" ref={scrollRef}>
 								{visibleMessages.length === 0 && (
 									<div className="omp-empty">
-										<div className="omp-empty-mark"><Icon name="spark" size={28} /></div>
+										<div className="omp-empty-mark">
+											<Icon name="spark" size={28} />
+										</div>
 										<h2>把任务交给 omp</h2>
 										<p>它会在当前工作目录中读取文件、执行命令，并把过程展现在这里。</p>
-									<div className="omp-empty-hints">
-										{["解释当前目录的代码结构", "帮我修复一个失败的测试", "梳理这个项目的待办事项"].map((hint) => (
-											<button key={hint} type="button" onClick={() => { setInput(hint); inputRef.current?.focus(); }}>
-												{hint}
-												<Icon name="chevron-right" size={12} />
-											</button>
-										))}
-									</div>
+										<div className="omp-empty-hints">
+											{[
+												"解释当前目录的代码结构",
+												"帮我修复一个失败的测试",
+												"梳理这个项目的待办事项",
+											].map((hint) => (
+												<button
+													key={hint}
+													type="button"
+													onClick={() => {
+														setInput(hint);
+														inputRef.current?.focus();
+													}}
+												>
+													{hint}
+													<Icon name="chevron-right" size={12} />
+												</button>
+											))}
+										</div>
 									</div>
 								)}
 
 								{visibleMessages.map((message) => (
 									<article key={message.id} className={`omp-message ${message.role}`}>
 										<div className="omp-message-avatar">
-											{message.role === "user" ? "你" : message.role === "agent" ? <Icon name="spark" size={13} /> : <Icon name="warning" size={13} />}
+											{message.role === "user" ? (
+												"你"
+											) : message.role === "agent" ? (
+												<Icon name="spark" size={13} />
+											) : (
+												<Icon name="warning" size={13} />
+											)}
 										</div>
 										<div className="omp-message-body">
 											<div className="omp-message-meta">
-												<span>{message.role === "user" ? "你" : message.role === "agent" ? "omp" : "系统"}</span>
-												<time>{new Date(message.ts).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</time>
+												<span>
+													{message.role === "user"
+														? "你"
+														: message.role === "agent"
+															? "omp"
+															: "系统"}
+												</span>
+												<time>
+													{new Date(message.ts).toLocaleTimeString("zh-CN", {
+														hour: "2-digit",
+														minute: "2-digit",
+													})}
+												</time>
 												{message.role === "user" && message.durationMs !== undefined && (
-													<span className="omp-duration"><Icon name="check" size={11} /> 已完成 {formatDuration(message.durationMs)}</span>
+													<span className="omp-duration">
+														<Icon name="check" size={11} /> 已完成{" "}
+														{formatDuration(message.durationMs)}
+													</span>
 												)}
 											</div>
 											<div className="omp-message-content">
 												{message.blocks.map((block, index) => (
-													<Block key={index} block={block} onOpenDoc={openDoc} query={searchText.trim()} />
+													<Block
+														key={index}
+														block={block}
+														onOpenDoc={openDoc}
+														query={searchText.trim()}
+													/>
 												))}
 											</div>
 											<MessageActions
@@ -1189,7 +1486,11 @@ export function App() {
 
 								{running && (
 									<div className="omp-typing">
-										<span className="omp-typing-dots"><i /><i /><i /></span>
+										<span className="omp-typing-dots">
+											<i />
+											<i />
+											<i />
+										</span>
 										omp 正在处理
 									</div>
 								)}
@@ -1213,11 +1514,20 @@ export function App() {
 									/>
 									<div className="omp-composer-footer">
 										<div className="omp-composer-hint">
-											<button type="button" className="omp-reference" onClick={insertFileReference} title="选择文件并插入引用">
+											<button
+												type="button"
+												className="omp-reference"
+												onClick={insertFileReference}
+												title="选择文件并插入引用"
+											>
 												<Icon name="folder" size={13} />
 												引用文件
 											</button>
-											{currentModeName && <span className="omp-hint-tag" title="推理档位">{currentModeName}</span>}
+											{currentModeName && (
+												<span className="omp-hint-tag" title="推理档位">
+													{currentModeName}
+												</span>
+											)}
 											<span title={settings.cwd}>{shortPath(settings.cwd)}</span>
 										</div>
 										<div className="omp-composer-tools">
@@ -1232,22 +1542,41 @@ export function App() {
 												<span>{currentModelName || "模型"}</span>
 												<Icon name="chevron" size={12} />
 											</button>
-										{running ? (
-											<button type="button" className="omp-send stop" onClick={cancel} title="停止当前任务">
-												<Icon name="stop" size={13} /> 停止
-											</button>
-										) : (
-											<button type="button" className="omp-send" onClick={send} disabled={!connected || !input.trim()} title="发送">
-												<Icon name="send" size={13} /> 发送
-											</button>
-										)}
+											{running ? (
+												<button
+													type="button"
+													className="omp-send stop"
+													onClick={cancel}
+													title="停止当前任务"
+												>
+													<Icon name="stop" size={13} /> 停止
+												</button>
+											) : (
+												<button
+													type="button"
+													className="omp-send"
+													onClick={send}
+													disabled={!connected || !input.trim()}
+													title="发送"
+												>
+													<Icon name="send" size={13} /> 发送
+												</button>
+											)}
 										</div>
 									</div>
 									{modelMenuOpen && (
 										<div className="omp-model-menu">
 											<div className="omp-model-menu-head">
-												<span><Icon name="spark" size={14} /> 模型与推理档位</span>
-												<button type="button" className="omp-icon-button" onClick={() => setModelMenuOpen(false)} title="关闭" aria-label="关闭">
+												<span>
+													<Icon name="spark" size={14} /> 模型与推理档位
+												</span>
+												<button
+													type="button"
+													className="omp-icon-button"
+													onClick={() => setModelMenuOpen(false)}
+													title="关闭"
+													aria-label="关闭"
+												>
 													<Icon name="close" size={13} />
 												</button>
 											</div>
@@ -1256,10 +1585,17 @@ export function App() {
 													<div className="omp-model-section">
 														<div className="omp-model-section-title">推理档位</div>
 														{activeState.modes.availableModes.map((mode) => (
-															<button key={mode.id} type="button" className={`omp-model-item ${mode.id === activeState.modes?.currentModeId ? "active" : ""}`} onClick={() => void changeMode(mode.id)}>
+															<button
+																key={mode.id}
+																type="button"
+																className={`omp-model-item ${mode.id === activeState.modes?.currentModeId ? "active" : ""}`}
+																onClick={() => void changeMode(mode.id)}
+															>
 																<span>{mode.name}</span>
 																{mode.description && <small>{mode.description}</small>}
-																{mode.id === activeState.modes?.currentModeId && <Icon name="check" size={14} />}
+																{mode.id === activeState.modes?.currentModeId && (
+																	<Icon name="check" size={14} />
+																)}
 															</button>
 														))}
 													</div>
@@ -1268,47 +1604,91 @@ export function App() {
 													<div className="omp-model-section">
 														<div className="omp-model-section-title">{modelOption.name}</div>
 														{modelOption.options.map((item) => (
-															<button key={item.value} type="button" className={`omp-model-item ${item.value === modelOption.currentValue ? "active" : ""}`} onClick={() => void changeConfigOption(modelOption.id, item.value)}>
+															<button
+																key={item.value}
+																type="button"
+																className={`omp-model-item ${item.value === modelOption.currentValue ? "active" : ""}`}
+																onClick={() => void changeConfigOption(modelOption.id, item.value)}
+															>
 																<span>{item.name}</span>
 																{item.description && <small>{item.description}</small>}
-																{item.value === modelOption.currentValue && <Icon name="check" size={14} />}
+																{item.value === modelOption.currentValue && (
+																	<Icon name="check" size={14} />
+																)}
 															</button>
 														))}
 													</div>
 												)}
-												{thoughtOption && thoughtOption.options && thoughtOption.options.length > 0 && (
-													<div className="omp-model-section">
-														<div className="omp-model-section-title">{thoughtOption.name}</div>
-														{thoughtOption.options.map((item) => (
-															<button key={item.value} type="button" className={`omp-model-item ${item.value === thoughtOption.currentValue ? "active" : ""}`} onClick={() => void changeConfigOption(thoughtOption.id, item.value)}>
-																<span>{item.name}</span>
-																{item.value === thoughtOption.currentValue && <Icon name="check" size={14} />}
-															</button>
-														))}
-													</div>
-												)}
+												{thoughtOption &&
+													thoughtOption.options &&
+													thoughtOption.options.length > 0 && (
+														<div className="omp-model-section">
+															<div className="omp-model-section-title">{thoughtOption.name}</div>
+															{thoughtOption.options.map((item) => (
+																<button
+																	key={item.value}
+																	type="button"
+																	className={`omp-model-item ${item.value === thoughtOption.currentValue ? "active" : ""}`}
+																	onClick={() =>
+																		void changeConfigOption(thoughtOption.id, item.value)
+																	}
+																>
+																	<span>{item.name}</span>
+																	{item.value === thoughtOption.currentValue && (
+																		<Icon name="check" size={14} />
+																	)}
+																</button>
+															))}
+														</div>
+													)}
 												{otherSelects.map((option) => (
 													<div className="omp-model-section" key={option.id}>
 														<div className="omp-model-section-title">{option.name}</div>
 														{option.type === "boolean" ? (
-															<button type="button" className={`omp-model-item ${option.currentBoolean ? "active" : ""}`} onClick={() => void changeConfigOption(option.id, !option.currentBoolean)}>
+															<button
+																type="button"
+																className={`omp-model-item ${option.currentBoolean ? "active" : ""}`}
+																onClick={() =>
+																	void changeConfigOption(option.id, !option.currentBoolean)
+																}
+															>
 																<span>{option.currentBoolean ? "已开启" : "已关闭"}</span>
 															</button>
 														) : (
 															(option.options || []).map((item) => (
-																<button key={item.value} type="button" className={`omp-model-item ${item.value === option.currentValue ? "active" : ""}`} onClick={() => void changeConfigOption(option.id, item.value)}>
+																<button
+																	key={item.value}
+																	type="button"
+																	className={`omp-model-item ${item.value === option.currentValue ? "active" : ""}`}
+																	onClick={() => void changeConfigOption(option.id, item.value)}
+																>
 																	<span>{item.name}</span>
-																	{item.value === option.currentValue && <Icon name="check" size={14} />}
+																	{item.value === option.currentValue && (
+																		<Icon name="check" size={14} />
+																	)}
 																</button>
 															))
 														)}
 													</div>
 												))}
-												{!activeState?.modes?.availableModes.length && !modelOption && otherSelects.length === 0 && (
-													<div className="omp-model-empty">当前 omp 未提供可切换的模型或档位。<br />可在设置中修改 omp 配置。</div>
-												)}
+												{!activeState?.modes?.availableModes.length &&
+													!modelOption &&
+													otherSelects.length === 0 && (
+														<div className="omp-model-empty">
+															当前 omp 未提供可切换的模型或档位。
+															<br />
+															可在设置中修改 omp 配置。
+														</div>
+													)}
 											</div>
-											<button type="button" className="omp-model-config" onClick={() => { setModelMenuOpen(false); setShowSettings(true); }}>
+											<button
+												type="button"
+												className="omp-model-config"
+												onClick={() => {
+													setModelMenuOpen(false);
+													setShowSettings(true);
+												}}
+											>
 												<Icon name="settings" size={13} /> 配置自定义模型
 											</button>
 										</div>
@@ -1325,33 +1705,67 @@ export function App() {
 										<Icon name="file" size={14} />
 										<span>文件预览</span>
 										{currentDoc && (
-											<span className="omp-preview-current" title={currentDoc.path || currentDoc.name}>
+											<span
+												className="omp-preview-current"
+												title={currentDoc.path || currentDoc.name}
+											>
 												· {currentDoc.name}
 											</span>
 										)}
 									</div>
 									<div className="omp-preview-actions">
-										<button type="button" className="omp-icon-button" onClick={openLocalFile} title="打开文件" aria-label="打开文件">
+										<button
+											type="button"
+											className="omp-icon-button"
+											onClick={openLocalFile}
+											title="打开文件"
+											aria-label="打开文件"
+										>
 											<Icon name="folder" size={14} />
 										</button>
 										{currentDoc?.path && (
-											<button type="button" className="omp-icon-button" onClick={reloadDoc} title="重新读取文件" aria-label="重新读取文件">
+											<button
+												type="button"
+												className="omp-icon-button"
+												onClick={reloadDoc}
+												title="重新读取文件"
+												aria-label="重新读取文件"
+											>
 												<Icon name="refresh" size={14} />
 											</button>
 										)}
-										<button type="button" className="omp-icon-button" onClick={() => setShowPreview(false)} title="关闭预览" aria-label="关闭预览">
+										<button
+											type="button"
+											className="omp-icon-button"
+											onClick={() => setShowPreview(false)}
+											title="关闭预览"
+											aria-label="关闭预览"
+										>
 											<Icon name="close" size={14} />
 										</button>
 									</div>
 								</div>
 								<div className="omp-file-tabs">
 									{docs.map((doc) => (
-										<div key={doc.key} className={`omp-file-tab ${activeDoc === doc.key ? "active" : ""}`}>
-											<button type="button" onClick={() => setActiveDoc(doc.key)} title={doc.path || doc.name}>
+										<div
+											key={doc.key}
+											className={`omp-file-tab ${activeDoc === doc.key ? "active" : ""}`}
+										>
+											<button
+												type="button"
+												onClick={() => setActiveDoc(doc.key)}
+												title={doc.path || doc.name}
+											>
 												<Icon name="file" size={12} />
 												<span>{doc.name}</span>
 											</button>
-											<button type="button" className="omp-tab-close" onClick={() => closeDoc(doc.key)} title="关闭" aria-label={`关闭 ${doc.name}`}>
+											<button
+												type="button"
+												className="omp-tab-close"
+												onClick={() => closeDoc(doc.key)}
+												title="关闭"
+												aria-label={`关闭 ${doc.name}`}
+											>
 												<Icon name="close" size={11} />
 											</button>
 										</div>
@@ -1381,7 +1795,9 @@ export function App() {
 			{permission && (
 				<div className="omp-modal-layer" role="dialog" aria-modal="true" aria-label="权限确认">
 					<div className="omp-modal">
-						<div className="omp-modal-icon warning"><Icon name="warning" size={18} /></div>
+						<div className="omp-modal-icon warning">
+							<Icon name="warning" size={18} />
+						</div>
 						<h3>需要你的确认</h3>
 						<p>omp 请求执行以下操作，请确认是否允许。</p>
 						<div className="omp-permission-title">{permission.title}</div>
@@ -1392,7 +1808,9 @@ export function App() {
 									type="button"
 									className={/reject|deny|cancel/i.test(option.kind) ? "secondary" : "primary"}
 									onClick={() => {
-										permission.respond({ outcome: { outcome: "selected", optionId: option.optionId } });
+										permission.respond({
+											outcome: { outcome: "selected", optionId: option.optionId },
+										});
 										setPermission(null);
 									}}
 								>
@@ -1407,20 +1825,31 @@ export function App() {
 			{showSettings && (
 				<div className="omp-modal-layer" role="dialog" aria-modal="true" aria-label="设置">
 					<div className="omp-modal settings">
-						<div className="omp-modal-icon"><Icon name="settings" size={18} /></div>
+						<div className="omp-modal-icon">
+							<Icon name="settings" size={18} />
+						</div>
 						<h3>设置</h3>
 						<p>修改后会在下次启动会话时生效，主题会立即应用。</p>
 						<label>
 							<span>omp CLI 路径</span>
-							<input value={settings.ompCliPath} onChange={(event) => setSettings({ ...settings, ompCliPath: event.target.value })} />
+							<input
+								value={settings.ompCliPath}
+								onChange={(event) => setSettings({ ...settings, ompCliPath: event.target.value })}
+							/>
 						</label>
 						<label>
 							<span>bun 路径</span>
-							<input value={settings.bunPath} onChange={(event) => setSettings({ ...settings, bunPath: event.target.value })} />
+							<input
+								value={settings.bunPath}
+								onChange={(event) => setSettings({ ...settings, bunPath: event.target.value })}
+							/>
 						</label>
 						<label>
 							<span>工作目录</span>
-							<input value={settings.cwd} onChange={(event) => setSettings({ ...settings, cwd: event.target.value })} />
+							<input
+								value={settings.cwd}
+								onChange={(event) => setSettings({ ...settings, cwd: event.target.value })}
+							/>
 						</label>
 						<div className="omp-settings-theme">
 							<span>主题</span>
@@ -1438,8 +1867,12 @@ export function App() {
 							</div>
 						</div>
 						<div className="omp-modal-actions">
-							<button type="button" className="secondary" onClick={() => setShowSettings(false)}>取消</button>
-							<button type="button" className="primary" onClick={saveSettings}>保存</button>
+							<button type="button" className="secondary" onClick={() => setShowSettings(false)}>
+								取消
+							</button>
+							<button type="button" className="primary" onClick={saveSettings}>
+								保存
+							</button>
 						</div>
 					</div>
 				</div>
@@ -1447,7 +1880,9 @@ export function App() {
 
 			{stderrLog.length > 0 && (
 				<details className="omp-logs">
-					<summary><Icon name="warning" size={12} /> omp 日志（{stderrLog.length}）</summary>
+					<summary>
+						<Icon name="warning" size={12} /> omp 日志（{stderrLog.length}）
+					</summary>
 					<pre>{stderrLog.join("")}</pre>
 				</details>
 			)}

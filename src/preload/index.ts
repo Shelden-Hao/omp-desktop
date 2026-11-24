@@ -1,5 +1,10 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { DesktopSettings, OpenedFile, StoredSession, ToolResult } from "../renderer/acp-client";
+import type {
+	DesktopSettings,
+	OpenedFile,
+	StoredSession,
+	ToolResult,
+} from "../renderer/acp-client";
 
 export interface DesktopBridge {
 	settings: {
