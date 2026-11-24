@@ -1,8 +1,9 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme } from "electron";
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 
 // ---------------------------------------------------------------------------
 // 配置：全部可改，默认自动探测本机已安装的 bun + omp
@@ -71,6 +72,236 @@ function languageFor(fileName: string) {
 	return LANGUAGE_BY_EXTENSION[ext] || "text";
 }
 
+let settings = loadSettings();
+nativeTheme.themeSource = settings.theme === "system" ? "system" : settings.theme;
+
+interface ToolResult {
+	ok: boolean;
+	result?: unknown;
+	error?: string;
+}
+
+function toolOk(result: unknown = {}): ToolResult {
+	return { ok: true, result };
+}
+
+function toolFail(error: unknown): ToolResult {
+	return { ok: false, error: error instanceof Error ? error.message : String(error) };
+}
+
+function resolveWorkspacePath(input: string): string {
+	const root = resolve(settings.cwd);
+	const target = resolve(isAbsolute(input) ? input : join(root, input));
+	const rootKey = root.toLowerCase();
+	const targetKey = target.toLowerCase();
+	if (targetKey !== rootKey && !targetKey.startsWith(`${rootKey}${sep.toLowerCase()}`)) {
+		throw new Error("路径超出工作目录");
+	}
+	return target;
+}
+
+function resolveExistingPath(input: string): string {
+	const candidate = resolveWorkspacePath(input);
+	if (!existsSync(candidate)) return candidate;
+	try {
+		const real = resolve(realpathSync(candidate));
+		const realKey = real.toLowerCase();
+		const rootKey = resolve(settings.cwd).toLowerCase();
+		if (realKey !== rootKey && !realKey.startsWith(`${rootKey}${sep.toLowerCase()}`)) {
+			throw new Error("路径超出工作目录");
+		}
+		return real;
+	} catch (error) {
+		if (error instanceof Error && error.message === "路径超出工作目录") throw error;
+		return candidate;
+	}
+}
+
+function acpFsRead(params: Record<string, unknown>): ToolResult {
+	try {
+		if (typeof params.path !== "string" || !params.path) throw new Error("缺少文件路径");
+		const filePath = resolveExistingPath(params.path);
+		const document = readTextDocument(filePath);
+		const line = typeof params.line === "number" && params.line > 0 ? params.line : 1;
+		const limit = typeof params.limit === "number" && params.limit > 0 ? params.limit : undefined;
+		let content = document.content;
+		if (line > 1 || limit !== undefined) {
+			const lines = content.split(/\r?\n/);
+			content = lines.slice(line - 1, limit ? line - 1 + limit : undefined).join("\n");
+		}
+		return toolOk({ content });
+	} catch (error) {
+		return toolFail(error);
+	}
+}
+
+function acpFsWrite(params: Record<string, unknown>): ToolResult {
+	try {
+		if (typeof params.path !== "string" || !params.path) throw new Error("缺少文件路径");
+		if (typeof params.content !== "string") throw new Error("文件内容必须是文本");
+		const filePath = resolveWorkspacePath(params.path);
+		const contentBytes = Buffer.byteLength(params.content, "utf8");
+		if (contentBytes > MAX_PREVIEW_BYTES) throw new Error("单次写入超过 2 MB");
+		mkdirSync(dirname(filePath), { recursive: true });
+		writeFileSync(filePath, params.content, "utf8");
+		return toolOk();
+	} catch (error) {
+		return toolFail(error);
+	}
+}
+
+interface TerminalSession {
+	id: string;
+	child: ChildProcess;
+	output: string;
+	truncated: boolean;
+	limit: number;
+	exitCode: number | null;
+	signal: string | null;
+	waiters: Array<() => void>;
+}
+
+const terminals = new Map<string, TerminalSession>();
+
+function terminalStatus(session: TerminalSession) {
+	return session.exitCode === null && session.signal === null
+		? null
+		: { exitCode: session.exitCode, signal: session.signal };
+}
+
+function appendTerminalOutput(session: TerminalSession, chunk: string) {
+	session.output += chunk;
+	const bytes = Buffer.byteLength(session.output, "utf8");
+	if (bytes <= session.limit) return;
+	const buffer = Buffer.from(session.output, "utf8");
+	let text = buffer.subarray(buffer.length - session.limit).toString("utf8");
+	while (text.startsWith("\uFFFD")) text = text.slice(1);
+	session.output = text;
+	session.truncated = true;
+}
+
+function markTerminalExited(session: TerminalSession, exitCode: number | null, signal: string | null) {
+	session.exitCode = exitCode;
+	session.signal = signal;
+	for (const resolveWaiter of session.waiters) resolveWaiter();
+	session.waiters = [];
+}
+
+function terminateTerminal(session: TerminalSession) {
+	if (session.exitCode === null && session.signal === null) session.child.kill();
+}
+
+function releaseAllTerminals() {
+	for (const session of terminals.values()) terminateTerminal(session);
+	terminals.clear();
+}
+
+function acpTerminalCreate(params: Record<string, unknown>): ToolResult {
+	try {
+		if (typeof params.command !== "string" || !params.command) throw new Error("缺少命令");
+		const args = Array.isArray(params.args) ? params.args.filter((item): item is string => typeof item === "string") : [];
+		const workspace = resolve(settings.cwd);
+		const cwd = typeof params.cwd === "string" && params.cwd ? resolveWorkspacePath(params.cwd) : workspace;
+		const env: NodeJS.ProcessEnv = { ...process.env };
+		delete env.ELECTRON_RUN_AS_NODE;
+		if (Array.isArray(params.env)) {
+			for (const item of params.env) {
+				if (item && typeof item === "object" && typeof item.name === "string" && typeof item.value === "string") {
+					env[item.name] = item.value;
+				}
+			}
+		}
+		const limit =
+			typeof params.outputByteLimit === "number" && params.outputByteLimit > 0
+				? params.outputByteLimit
+				: 1024 * 1024;
+
+		const child = spawn(params.command, args, {
+			cwd,
+			env,
+			windowsHide: true,
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		const session: TerminalSession = {
+			id: randomUUID(),
+			child,
+			output: "",
+			truncated: false,
+			limit,
+			exitCode: null,
+			signal: null,
+			waiters: [],
+		};
+		terminals.set(session.id, session);
+
+		child.stdout?.setEncoding("utf8");
+		child.stdout?.on("data", (chunk: string) => appendTerminalOutput(session, chunk));
+		child.stderr?.setEncoding("utf8");
+		child.stderr?.on("data", (chunk: string) => appendTerminalOutput(session, chunk));
+		child.on("error", (error) => {
+			appendTerminalOutput(session, `[spawn error] ${error.message}\n`);
+			markTerminalExited(session, 1, null);
+		});
+		child.on("close", (code, signal) => markTerminalExited(session, code, signal));
+
+		return toolOk({ terminalId: session.id });
+	} catch (error) {
+		return toolFail(error);
+	}
+}
+
+function requireTerminal(params: Record<string, unknown>): TerminalSession {
+	if (typeof params.terminalId !== "string") throw new Error("缺少终端 ID");
+	const session = terminals.get(params.terminalId);
+	if (!session) throw new Error("终端不存在或已释放");
+	return session;
+}
+
+function acpTerminalOutput(params: Record<string, unknown>): ToolResult {
+	try {
+		const session = requireTerminal(params);
+		return toolOk({
+			output: session.output,
+			truncated: session.truncated,
+			exitStatus: terminalStatus(session),
+		});
+	} catch (error) {
+		return toolFail(error);
+	}
+}
+
+async function acpTerminalWait(params: Record<string, unknown>): Promise<ToolResult> {
+	try {
+		const session = requireTerminal(params);
+		if (session.exitCode === null && session.signal === null) {
+			await new Promise<void>((resolveWaiter) => session.waiters.push(resolveWaiter));
+		}
+		return toolOk({ exitCode: session.exitCode, signal: session.signal });
+	} catch (error) {
+		return toolFail(error);
+	}
+}
+
+function acpTerminalKill(params: Record<string, unknown>): ToolResult {
+	try {
+		terminateTerminal(requireTerminal(params));
+		return toolOk();
+	} catch (error) {
+		return toolFail(error);
+	}
+}
+
+function acpTerminalRelease(params: Record<string, unknown>): ToolResult {
+	try {
+		const session = requireTerminal(params);
+		terminateTerminal(session);
+		terminals.delete(session.id);
+		return toolOk();
+	} catch (error) {
+		return toolFail(error);
+	}
+}
+
 function readTextDocument(filePath: string): TextDocument {
 	const stat = statSync(filePath);
 	if (!stat.isFile()) throw new Error("路径不是文件");
@@ -116,9 +347,6 @@ function saveSettings(next: AppSettings) {
 	mkdirSync(dirname(SETTINGS_PATH), { recursive: true });
 	writeFileSync(SETTINGS_PATH, JSON.stringify(next, null, 2), "utf8");
 }
-
-let settings = loadSettings();
-nativeTheme.themeSource = settings.theme === "system" ? "system" : settings.theme;
 
 // ---------------------------------------------------------------------------
 // ACP 子进程：spawn omp acp，stdin/stdout 走 NDJSON JSON-RPC
@@ -186,6 +414,7 @@ function startAgent(): { ok: boolean; error?: string } {
 }
 
 function stopAgent() {
+	releaseAllTerminals();
 	if (agent) {
 		agent.stdin?.end();
 		agent.kill();
@@ -249,6 +478,19 @@ app.whenReady().then(() => {
 	});
 
 	ipcMain.handle("file:read", (_e, filePath: string) => readTextDocument(filePath));
+
+	const acpToolHandlers: Record<string, (params: Record<string, unknown>) => ToolResult | Promise<ToolResult>> = {
+		"acp:fs-read": acpFsRead,
+		"acp:fs-write": acpFsWrite,
+		"acp:terminal-create": acpTerminalCreate,
+		"acp:terminal-output": acpTerminalOutput,
+		"acp:terminal-wait": acpTerminalWait,
+		"acp:terminal-kill": acpTerminalKill,
+		"acp:terminal-release": acpTerminalRelease,
+	};
+	for (const [channel, handler] of Object.entries(acpToolHandlers)) {
+		ipcMain.handle(channel, (_e, params: Record<string, unknown>) => handler(params || {}));
+	}
 
 	ipcMain.handle("agent:start", () => startAgent());
 	ipcMain.handle("agent:stop", () => {

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { DesktopSettings, OpenedFile } from "../renderer/acp-client";
+import type { DesktopSettings, OpenedFile, ToolResult } from "../renderer/acp-client";
 
 export interface DesktopBridge {
 	settings: {
@@ -9,6 +9,15 @@ export interface DesktopBridge {
 	files: {
 		open(): Promise<OpenedFile | null>;
 		read(path: string): Promise<OpenedFile>;
+	};
+	acpTools: {
+		fsRead(params: Record<string, unknown>): Promise<ToolResult>;
+		fsWrite(params: Record<string, unknown>): Promise<ToolResult>;
+		terminalCreate(params: Record<string, unknown>): Promise<ToolResult>;
+		terminalOutput(params: Record<string, unknown>): Promise<ToolResult>;
+		terminalWait(params: Record<string, unknown>): Promise<ToolResult>;
+		terminalKill(params: Record<string, unknown>): Promise<ToolResult>;
+		terminalRelease(params: Record<string, unknown>): Promise<ToolResult>;
 	};
 	agent: {
 		start(): Promise<{ ok: boolean; error?: string }>;
@@ -29,6 +38,15 @@ const bridge: DesktopBridge = {
 	files: {
 		open: () => ipcRenderer.invoke("file:open"),
 		read: (path) => ipcRenderer.invoke("file:read", path),
+	},
+	acpTools: {
+		fsRead: (params) => ipcRenderer.invoke("acp:fs-read", params),
+		fsWrite: (params) => ipcRenderer.invoke("acp:fs-write", params),
+		terminalCreate: (params) => ipcRenderer.invoke("acp:terminal-create", params),
+		terminalOutput: (params) => ipcRenderer.invoke("acp:terminal-output", params),
+		terminalWait: (params) => ipcRenderer.invoke("acp:terminal-wait", params),
+		terminalKill: (params) => ipcRenderer.invoke("acp:terminal-kill", params),
+		terminalRelease: (params) => ipcRenderer.invoke("acp:terminal-release", params),
 	},
 	agent: {
 		start: () => ipcRenderer.invoke("agent:start"),

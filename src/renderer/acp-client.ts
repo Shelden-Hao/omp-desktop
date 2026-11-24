@@ -20,6 +20,12 @@ export interface OpenedFile {
 	language: string;
 }
 
+export interface ToolResult {
+	ok: boolean;
+	result?: unknown;
+	error?: string;
+}
+
 export interface AcpBridge {
 	agent: {
 		start(): Promise<{ ok: boolean; error?: string }>;
@@ -34,6 +40,15 @@ export interface AcpBridge {
 	files: {
 		open(): Promise<OpenedFile | null>;
 		read(path: string): Promise<OpenedFile>;
+	};
+	acpTools: {
+		fsRead(params: Record<string, unknown>): Promise<ToolResult>;
+		fsWrite(params: Record<string, unknown>): Promise<ToolResult>;
+		terminalCreate(params: Record<string, unknown>): Promise<ToolResult>;
+		terminalOutput(params: Record<string, unknown>): Promise<ToolResult>;
+		terminalWait(params: Record<string, unknown>): Promise<ToolResult>;
+		terminalKill(params: Record<string, unknown>): Promise<ToolResult>;
+		terminalRelease(params: Record<string, unknown>): Promise<ToolResult>;
 	};
 	onFrame(cb: (line: string) => void): () => void;
 	onStderr(cb: (text: string) => void): () => void;

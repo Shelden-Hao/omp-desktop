@@ -460,14 +460,44 @@ export function App() {
 					options: (params.options as Array<{ optionId: string; name: string; kind: string }>) || [],
 					respond: event.respond,
 				});
-			} else if (event.method === "fs/read_text_file") {
-				event.respondError(-32601, "文件读取将在外壳桥接完成后可用");
-			} else if (event.method === "fs/write_text_file") {
-				event.respondError(-32601, "文件写入将在外壳桥接完成后可用");
-			} else if (event.method.startsWith("terminal/")) {
-				event.respondError(-32601, "终端能力将在外壳桥接完成后可用");
-			} else {
-				event.respond({});
+				return;
+			}
+
+			const tools = window.desktop.acpTools;
+			const runTool = async (task: Promise<{ ok: boolean; result?: unknown; error?: string }>) => {
+				try {
+					const result = await task;
+					if (result.ok) event.respond(result.result ?? {});
+					else event.respondError(-32000, result.error || "工具执行失败");
+				} catch (error) {
+					event.respondError(-32000, (error as Error).message);
+				}
+			};
+
+			switch (event.method) {
+				case "fs/read_text_file":
+					void runTool(tools.fsRead(params));
+					break;
+				case "fs/write_text_file":
+					void runTool(tools.fsWrite(params));
+					break;
+				case "terminal/create":
+					void runTool(tools.terminalCreate(params));
+					break;
+				case "terminal/output":
+					void runTool(tools.terminalOutput(params));
+					break;
+				case "terminal/wait_for_exit":
+					void runTool(tools.terminalWait(params));
+					break;
+				case "terminal/kill":
+					void runTool(tools.terminalKill(params));
+					break;
+				case "terminal/release":
+					void runTool(tools.terminalRelease(params));
+					break;
+				default:
+					event.respond({});
 			}
 		},
 		[appendBlock, updateToolStatus],
