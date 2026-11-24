@@ -40,7 +40,7 @@ npm run dist:win       # 打包 Windows 安装包
 
 代码改动后必须执行 `npm run check`，全部通过再提交。
 
-Windows 上启动 Electron 前需清除 WorkBuddy 注入的环境变量：`env -u ELECTRON_RUN_AS_NODE npm start`（Git Bash）。
+Windows 上启动 Electron 前需清除宿主环境注入的 `ELECTRON_RUN_AS_NODE`：`env -u ELECTRON_RUN_AS_NODE npm start`（Git Bash）。
 
 ## 代码风格
 

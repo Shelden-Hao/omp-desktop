@@ -354,7 +354,7 @@ function findBun(home: string, npmGlobal: string): string {
 			candidates.push(join(dir, "node_modules", "bun", "bin", "bun.exe"));
 		candidates.push(join(dir, "bun.exe"));
 	}
-	// WorkBuddy / nvm4w 等会把 bun 装在版本化 node 目录里，逐个扫描。
+	// 部分工具链会把 bun 装在版本化 node 目录里，逐个扫描。
 	const versionRoots = [
 		join(home, ".workbuddy", "binaries", "node", "versions"),
 		join(home, "AppData", "Roaming", "nvm", "v"),
