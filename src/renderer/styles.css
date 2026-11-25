@@ -1641,11 +1641,15 @@ details[open] > summary .omp-fold-chevron {
   background: var(--accent-soft);
   color: var(--accent);
 }
-.omp-composer-hint > span {
+/* 路径标签才需要截断；入口 span 必须允许菜单浮层溢出 */
+.omp-composer-hint > span:not(.omp-entry-wrap) {
   max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.omp-composer-hint > .omp-entry-wrap {
+  overflow: visible;
 }
 .omp-hint-tag {
   padding: 2px 7px;
