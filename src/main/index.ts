@@ -21,6 +21,7 @@ import {
 	openLink,
 	openPath,
 	pickDirectory,
+	proxyEnv,
 	syncPowerBlockers,
 } from "./system";
 import {
@@ -588,6 +589,7 @@ function startAgent(): { ok: boolean; error?: string } {
 			[settings.ompCliPath, "acp", `--approval-mode=${settings.approvalMode}`],
 			{
 				cwd: settings.cwd,
+				env: proxyEnv(settings.proxyMode, settings.proxyUrl),
 				stdio: ["pipe", "pipe", "pipe"],
 				windowsHide: true,
 			},

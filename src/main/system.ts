@@ -78,6 +78,34 @@ export function syncPowerBlockers(settings: RuntimeSettings, agentRunning: boole
 	}
 }
 
+/**
+ * omp CLI / ACP 子进程不读 Electron 的 session proxy，只能通过环境变量传。
+ * direct 模式显式清掉宿主环境里的代理，避免“设置成直连却仍走系统代理”。
+ */
+export function proxyEnv(mode: ProxyMode, rawUrl: string): NodeJS.ProcessEnv {
+	const env = { ...process.env };
+	delete env.ELECTRON_RUN_AS_NODE;
+	const proxy = rawUrl.trim();
+	if (mode === "manual" && proxy) {
+		env.HTTP_PROXY = proxy;
+		env.HTTPS_PROXY = proxy;
+		env.ALL_PROXY = proxy;
+		if (!env.NO_PROXY) env.NO_PROXY = "localhost,127.0.0.1,::1";
+	} else if (mode === "direct") {
+		for (const key of [
+			"HTTP_PROXY",
+			"HTTPS_PROXY",
+			"ALL_PROXY",
+			"http_proxy",
+			"https_proxy",
+			"all_proxy",
+		]) {
+			delete env[key];
+		}
+	}
+	return env;
+}
+
 export async function applyProxy(settings: RuntimeSettings): Promise<void> {
 	try {
 		if (settings.proxyMode === "system") {

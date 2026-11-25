@@ -6,11 +6,14 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve, sep } from "node:path";
+import { proxyEnv } from "./system";
 
 export interface SkillHostSettings {
 	bunPath: string;
 	ompCliPath: string;
 	cwd: string;
+	proxyMode?: "direct" | "system" | "manual";
+	proxyUrl?: string;
 }
 
 export interface SkillCommandResult {
@@ -73,8 +76,7 @@ export function runOmpCommand(
 		return Promise.resolve(fail(`找不到 omp CLI：${settings.ompCliPath}`));
 
 	return new Promise((done) => {
-		const env = { ...process.env };
-		delete env.ELECTRON_RUN_AS_NODE;
+		const env = proxyEnv(settings.proxyMode ?? "direct", settings.proxyUrl ?? "");
 		let child;
 		try {
 			child = spawn(settings.bunPath, [settings.ompCliPath, ...args], {

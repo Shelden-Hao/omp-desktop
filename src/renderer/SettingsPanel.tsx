@@ -256,7 +256,9 @@ export function SettingsPanel({ settings, onClose, onSave }: SettingsPanelProps)
 								<div className="omp-set-row omp-set-row-stack">
 									<div className="omp-set-row-text">
 										<div className="omp-set-row-title">网络代理</div>
-										<p className="omp-set-row-desc">网络异常时可切换连接方式，保存后立即生效。</p>
+										<p className="omp-set-row-desc">
+											应用网络立即生效；omp 会话在下次启动时沿用新代理。
+										</p>
 									</div>
 									<div className="omp-set-proxy">
 										<select
