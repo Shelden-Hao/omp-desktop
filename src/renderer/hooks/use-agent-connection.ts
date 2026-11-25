@@ -25,7 +25,9 @@ import {
   routePermissionRequest,
   routeSessionUpdate,
 } from "../core/acp/event-router";
+import { applyConfigEffect, applyModeEffect, applyUsageEffect } from "../core/acp/apply-effect";
 import { parseContextReport } from "../core/context-report";
+import { loadSessionIndex } from "../core/session-boot";
 import { APPROVAL_LABEL } from "../core/labels";
 import type { Session } from "../core/session-filters";
 import type { MessageStore } from "./use-message-store";
@@ -201,44 +203,21 @@ export function useAgentConnection({
 
         switch (effect.type) {
           case "mode":
-            setSessionStates((prev) => {
-              const current = prev[sessionId] || { modes: null, configOptions: [] };
-              return {
-                ...prev,
-                [sessionId]: {
-                  ...current,
-                  modes: current.modes ? { ...current.modes, currentModeId: effect.modeId } : null,
-                },
-              };
-            });
+            setSessionStates((prev) => ({
+              ...prev,
+              [sessionId]: applyModeEffect(prev[sessionId], effect.modeId),
+            }));
             return;
           case "config":
-            setSessionStates((prev) => {
-              const current = prev[sessionId] || { modes: null, configOptions: [] };
-              return {
-                ...prev,
-                [sessionId]: { ...current, configOptions: effect.configOptions },
-              };
-            });
+            setSessionStates((prev) => ({
+              ...prev,
+              [sessionId]: applyConfigEffect(prev[sessionId], effect.configOptions),
+            }));
             return;
           case "usage":
             setContextReports((prev) => {
-              const current = prev[sessionId];
-              if (current) {
-                if (!effect.size || effect.size === current.contextWindow) return prev;
-                return { ...prev, [sessionId]: { ...current, contextWindow: effect.size } };
-              }
-              if (!effect.size) return prev;
-              return {
-                ...prev,
-                [sessionId]: {
-                  contextWindow: effect.size,
-                  usedTokens: effect.used,
-                  percent: (effect.used / effect.size) * 100,
-                  parts: [],
-                  reservedTokens: 0,
-                },
-              };
+              const next = applyUsageEffect(prev[sessionId], effect.size, effect.used);
+              return next ? { ...prev, [sessionId]: next } : prev;
             });
             return;
           case "user-chunk":
@@ -396,36 +375,14 @@ export function useAgentConnection({
         await acp.initialize();
         const loaded = await bridge.settings.get();
         const stored = await bridge.sessions.get();
-        let list: Session[] = stored.map((session) => ({
-          id: session.id,
-          title: session.title,
-          cwd: session.cwd || loaded.cwd,
-          ts: session.ts,
-        }));
-
-        try {
-          const remote = await acp.listSessions();
-          for (const session of remote.sessions || []) {
-            if (!list.some((item) => item.id === session.sessionId)) {
-              list.push({
-                id: session.sessionId,
-                title: session.title || `会话 ${list.length + 1}`,
-                cwd: session.cwd || loaded.cwd,
-                ts: Date.now(),
-              });
-            }
-          }
-        } catch {
-          // 某些 omp 版本没有 session/list，忽略即可。
-        }
-
-        if (list.length === 0) {
-          const session = await acp.newSession(loaded.cwd);
-          list = [{ id: session.sessionId, title: "会话 1", cwd: loaded.cwd, ts: Date.now() }];
-          loadedSessions.current.add(session.sessionId);
+        const index = await loadSessionIndex(acp, loaded, stored);
+        const { list } = index;
+        if (index.created) {
+          const created = index.created;
+          loadedSessions.current.add(created.sessionId);
           setSessionStates((prev) => ({
             ...prev,
-            [session.sessionId]: normalizeSessionState(session),
+            [created.sessionId]: normalizeSessionState(created),
           }));
         }
 
