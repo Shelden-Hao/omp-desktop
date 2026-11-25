@@ -5,6 +5,13 @@
 
 export type Role = "user" | "agent" | "system";
 
+/** ACP 工具调用里的文件改动：oldText/newText 是该文件改动前/后的完整内容 */
+export interface ToolDiff {
+  path: string;
+  oldText: string | null;
+  newText: string;
+}
+
 export interface ContentBlock {
   type: "text" | "thinking" | "tool_call" | "tool_result" | "diff" | "other";
   text: string;
@@ -14,6 +21,10 @@ export interface ContentBlock {
   rawInput?: string;
   result?: string;
   status?: "pending" | "completed" | "failed";
+  /** 工具调用涉及的文件改动，来自 ACP content 里的 diff 块 */
+  diffs?: ToolDiff[];
+  /** 工具调用涉及的文件路径，来自 ACP 的 locations */
+  locations?: string[];
   raw?: unknown;
 }
 

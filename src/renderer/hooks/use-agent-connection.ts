@@ -112,14 +112,7 @@ export function useAgentConnection({
   const silentContextRef = useRef<{ sessionId: string; text: string } | null>(null);
   const contextBusyRef = useRef(false);
 
-  const {
-    setMessagesBySession,
-    messagesRef,
-    appendBlock,
-    appendUserChunk,
-    updateToolStatus,
-    updateMessages,
-  } = store;
+  const { setMessagesBySession, messagesRef, appendBlock, appendUserChunk, updateToolCall } = store;
 
   useEffect(() => {
     activeIdRef.current = activeId;
@@ -249,21 +242,19 @@ export function useAgentConnection({
             return;
           case "tool-call": {
             const tool = effect.tool;
-            appendBlock(
-              sessionId,
-              {
-                type: "tool_call",
-                text: tool.toolCallId,
-                toolName: tool.toolName,
-                title: tool.title,
-                kind: tool.kind,
-                rawInput: tool.rawInput,
-                result: tool.result,
-                status: "pending",
-                raw: tool.raw,
-              },
-              tool.toolCallId,
-            );
+            appendBlock(sessionId, {
+              type: "tool_call",
+              text: tool.toolCallId,
+              toolName: tool.toolName,
+              title: tool.title,
+              kind: tool.kind,
+              rawInput: tool.rawInput,
+              result: tool.result,
+              diffs: tool.diffs.length ? tool.diffs : undefined,
+              locations: tool.locations.length ? tool.locations : undefined,
+              status: "pending",
+              raw: tool.raw,
+            });
             // 只记录实时执行的动作：session/load 会回放历史工具调用，不能被当成新事件
             if (runningRef.current) {
               const label = `${tool.toolName} ${tool.kind}`;
@@ -283,33 +274,13 @@ export function useAgentConnection({
             return;
           }
           case "tool-update":
-            if (effect.status) {
-              updateToolStatus(
-                sessionId,
-                effect.toolCallId,
-                effect.status,
-                effect.result,
-                effect.title,
-              );
-            } else if (effect.title || effect.result) {
-              updateMessages(sessionId, (prev) => {
-                const copy = [...prev];
-                for (const message of copy) {
-                  const idx = message.blocks.findIndex(
-                    (block) => block.type === "tool_call" && block.text === effect.toolCallId,
-                  );
-                  if (idx < 0) continue;
-                  const block = message.blocks[idx];
-                  message.blocks[idx] = {
-                    ...block,
-                    title: effect.title || block.title,
-                    result: effect.result || block.result,
-                  };
-                  break;
-                }
-                return copy;
-              });
-            }
+            updateToolCall(sessionId, effect.toolCallId, {
+              status: effect.status,
+              result: effect.result,
+              title: effect.title,
+              diffs: effect.diffs,
+              locations: effect.locations,
+            });
             return;
         }
         return;
@@ -343,7 +314,7 @@ export function useAgentConnection({
         void runTool(runner(params) as Promise<{ ok: boolean; result?: unknown; error?: string }>);
       else event.respond({});
     },
-    [appendBlock, appendUserChunk, logAudit, runningRef, updateMessages, updateToolStatus],
+    [appendBlock, appendUserChunk, logAudit, runningRef, updateToolCall],
   );
 
   // 事件处理器放 ref：epoch 重连时不该因为回调引用变化而断链

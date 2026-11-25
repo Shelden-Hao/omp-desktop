@@ -6,7 +6,7 @@
  */
 
 import type { RefObject } from "react";
-import type { ChatMessage, ContentBlock } from "../../../shared/types";
+import type { ChatMessage } from "../../../shared/types";
 import { formatDuration } from "../../core/format";
 import { Icon } from "../common/Icon";
 import { Block } from "./ContentBlock";
@@ -121,13 +121,6 @@ function Message({ message, isActive, query, onOpenDoc, onRetry }: MessageProps)
 		(block) => block.type === "tool_call" && block.status === "pending",
 	);
 	const generating = message.role === "agent" && (isActive || hasPendingTool);
-	// 末尾连续的 text 块是「结论」，前面的工具调用/思考收进折叠区
-	const splitAt = trailingTextStart(message.blocks);
-	const processBlocks = message.blocks.slice(0, splitAt);
-	const finalBlocks = message.blocks.slice(splitAt);
-	const hasProcessFold =
-		message.role === "agent" && processBlocks.length > 0 && finalBlocks.length > 0 && !isActive;
-	const contentBlocks = hasProcessFold ? finalBlocks : message.blocks;
 
 	return (
 		<article className={`omp-message ${message.role}`} data-message-id={message.id}>
@@ -155,33 +148,20 @@ function Message({ message, isActive, query, onOpenDoc, onRetry }: MessageProps)
 						</span>
 					)}
 				</div>
-				{message.role === "agent" &&
-					(hasProcessFold ? (
-						<details className="omp-process-fold">
-							<summary className="omp-agent-status">
-								<Icon name="check" size={11} />
-								<span>
-									已完成
-									{message.durationMs !== undefined ? ` ${formatDuration(message.durationMs)}` : ""}
-								</span>
-								<span className="omp-process-hint">查看处理过程</span>
-								<Icon name="chevron" size={12} className="omp-fold-chevron" />
-							</summary>
-							<div className="omp-process-body">
-								{processBlocks.map((block, index) => (
-									<Block key={index} block={block} onOpenDoc={onOpenDoc} query={query} />
-								))}
-							</div>
-						</details>
-					) : (
-						<div className={`omp-agent-status ${generating ? "busy" : ""}`}>
-							<Icon name={generating ? "spark" : "check"} size={11} />
+				{message.role === "agent" && (
+					<div className={`omp-agent-status ${generating ? "busy" : ""}`}>
+						<Icon name={generating ? "spark" : "check"} size={11} />
+						<span>
 							{generating ? "生成中" : "已完成"}
-						</div>
-					))}
-				{contentBlocks.length > 0 && (
+							{!generating && message.durationMs !== undefined
+								? ` ${formatDuration(message.durationMs)}`
+								: ""}
+						</span>
+					</div>
+				)}
+				{message.blocks.length > 0 && (
 					<div className="omp-message-content">
-						{contentBlocks.map((block, index) => (
+						{message.blocks.map((block, index) => (
 							<Block key={index} block={block} onOpenDoc={onOpenDoc} query={query} />
 						))}
 					</div>
@@ -193,11 +173,4 @@ function Message({ message, isActive, query, onOpenDoc, onRetry }: MessageProps)
 			</div>
 		</article>
 	);
-}
-
-/** 从末尾往前跳过连续 text 块，返回结论区的起点下标 */
-function trailingTextStart(blocks: ContentBlock[]) {
-	let index = blocks.length;
-	while (index > 0 && blocks[index - 1].type === "text") index -= 1;
-	return index;
 }

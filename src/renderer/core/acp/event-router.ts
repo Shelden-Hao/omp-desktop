@@ -7,9 +7,9 @@
  */
 
 import type { AcpEvent } from "../../../shared/protocol";
-import type { SessionConfigOption } from "../../../shared/types";
+import type { SessionConfigOption, ToolDiff } from "../../../shared/types";
 import { normalizeSessionState } from "./client";
-import { extractText, formatToolInput } from "../tool-input";
+import { formatToolInput } from "../tool-input";
 
 /** 工具调用块的原始字段，交由消息层组装成 ContentBlock */
 export interface ToolCallInfo {
@@ -19,7 +19,59 @@ export interface ToolCallInfo {
   kind: string;
   rawInput: string;
   result: string;
+  diffs: ToolDiff[];
+  locations: string[];
   raw: unknown;
+}
+
+/**
+ * ACP 的工具 content 既有纯文本块也有 diff 块：
+ * - 首条文本通常是命令 / 文件标签，与 title 重复，去掉
+ * - diff 块单独取出来，由界面画成 +/- 视图
+ */
+function readToolContent(value: unknown, title: string): { text: string; diffs: ToolDiff[] } {
+  const diffs: ToolDiff[] = [];
+  const texts: string[] = [];
+  const collect = (entry: unknown) => {
+    if (Array.isArray(entry)) {
+      entry.forEach(collect);
+      return;
+    }
+    if (typeof entry === "string") {
+      texts.push(entry);
+      return;
+    }
+    if (!entry || typeof entry !== "object") return;
+    const block = entry as Record<string, unknown>;
+    if (block.type === "diff") {
+      if (typeof block.path === "string" && block.path) {
+        diffs.push({
+          path: block.path,
+          oldText: typeof block.oldText === "string" ? block.oldText : null,
+          newText: typeof block.newText === "string" ? block.newText : "",
+        });
+      }
+      return;
+    }
+    if (block.type === "content") {
+      collect(block.content);
+      return;
+    }
+    if (typeof block.text === "string") texts.push(block.text);
+  };
+  collect(value);
+  const body = texts.filter((text, index) => !(index === 0 && text === title));
+  return { text: body.join("\n\n"), diffs };
+}
+
+function readLocations(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const paths: string[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || !("path" in entry)) continue;
+    if (typeof entry.path === "string" && entry.path) paths.push(entry.path);
+  }
+  return paths;
 }
 
 export type SessionUpdateEffect =
@@ -37,6 +89,8 @@ export type SessionUpdateEffect =
       status?: "completed" | "failed";
       title?: string;
       result?: string;
+      diffs: ToolDiff[];
+      locations: string[];
     };
 
 /** 解析 `session/update` 通知；无法识别时返回 null，调用方直接忽略 */
@@ -95,16 +149,20 @@ function routeToolCall(
   const toolCallId = update.toolCallId as string;
   if (!toolCallId) return null;
   const toolKind = typeof update.kind === "string" ? update.kind : "";
+  const title = typeof update.title === "string" ? update.title : "";
+  const content = readToolContent(update.content, title);
   return {
     type: "tool-call",
     sessionId,
     tool: {
       toolCallId,
       toolName: typeof update.name === "string" && update.name ? update.name : toolKind || "tool",
-      title: typeof update.title === "string" ? update.title : "",
+      title,
       kind: toolKind,
       rawInput: formatToolInput(update.rawInput),
-      result: extractText(update.content),
+      result: content.text,
+      diffs: content.diffs,
+      locations: readLocations(update.locations),
       raw: update,
     },
   };
@@ -117,13 +175,17 @@ function routeToolUpdate(
   const toolCallId = update.toolCallId as string;
   if (!toolCallId) return null;
   const next = update.status as string;
+  const title = typeof update.title === "string" ? update.title : undefined;
+  const content = readToolContent(update.content, title ?? "");
   return {
     type: "tool-update",
     sessionId,
     toolCallId,
     status: next === "completed" ? "completed" : next === "failed" ? "failed" : undefined,
-    title: typeof update.title === "string" ? update.title : undefined,
-    result: update.content !== undefined ? extractText(update.content) : undefined,
+    title,
+    result: content.text,
+    diffs: content.diffs,
+    locations: readLocations(update.locations),
   };
 }
 

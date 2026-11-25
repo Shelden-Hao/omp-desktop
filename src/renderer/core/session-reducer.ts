@@ -63,11 +63,20 @@ export function appendUserChunk(
   return copy;
 }
 
-/** 更新某个工具调用块的状态/结果；块用 toolCallId 存在 text 里 */
+/** 工具块可被后续 update 覆盖的字段；空值不覆盖已有内容 */
+export interface ToolBlockPatch {
+  status?: ContentBlock["status"];
+  title?: string;
+  result?: string;
+  diffs?: ContentBlock["diffs"];
+  locations?: ContentBlock["locations"];
+}
+
+/** 更新某个工具调用块的状态/结果/文件改动；块用 toolCallId 存在 text 里 */
 export function updateToolBlock(
   messages: ChatMessage[],
   toolCallId: string,
-  patch: { status?: "completed" | "failed"; result?: string; title?: string },
+  patch: ToolBlockPatch,
 ): ChatMessage[] {
   return messages.map((message) => {
     const hit = message.blocks.some(
@@ -83,6 +92,8 @@ export function updateToolBlock(
               status: patch.status ?? block.status,
               result: patch.result || block.result,
               title: patch.title || block.title,
+              diffs: patch.diffs?.length ? patch.diffs : block.diffs,
+              locations: patch.locations?.length ? patch.locations : block.locations,
             }
           : block,
       ),

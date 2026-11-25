@@ -9,6 +9,7 @@ import type { ChatMessage, ContentBlock } from "../../shared/types";
 import {
   appendBlock as reduceAppendBlock,
   appendUserChunk as reduceAppendUserChunk,
+  type ToolBlockPatch,
   updateToolBlock,
 } from "../core/session-reducer";
 
@@ -18,23 +19,14 @@ export interface MessageStore {
   /** 消息镜像：loadSessionHistory 清空前先留一份，omp 回放不出历史时用它兜底 */
   messagesRef: React.RefObject<Record<string, ChatMessage[]>>;
   updateMessages: (sessionId: string, updater: (prev: ChatMessage[]) => ChatMessage[]) => void;
-  appendBlock: (sessionId: string, block: ContentBlock, toolCallId?: string) => void;
+  appendBlock: (sessionId: string, block: ContentBlock) => void;
   appendUserChunk: (sessionId: string, text: string) => void;
-  updateToolStatus: (
-    sessionId: string,
-    toolCallId: string,
-    next: "completed" | "failed",
-    result?: string,
-    title?: string,
-  ) => void;
-  /** 工具调用 ID → 所在消息下标，用于 O(1) 定位 */
-  toolIndex: React.RefObject<Map<string, number>>;
+  updateToolCall: (sessionId: string, toolCallId: string, patch: ToolBlockPatch) => void;
 }
 
 export function useMessageStore(): MessageStore {
   const [messagesBySession, setMessagesBySession] = useState<Record<string, ChatMessage[]>>({});
   const messagesRef = useRef<Record<string, ChatMessage[]>>({});
-  const toolIndex = useRef<Map<string, number>>(new Map());
 
   // 镜像必须在清空之前就位，否则 loadSessionHistory 拿不到上一份内容做兜底
   useLayoutEffect(() => {
@@ -49,12 +41,8 @@ export function useMessageStore(): MessageStore {
   );
 
   const appendBlock = useCallback(
-    (sessionId: string, block: ContentBlock, toolCallId?: string) => {
-      updateMessages(sessionId, (prev) => {
-        const { messages: next, index } = reduceAppendBlock(prev, block);
-        if (toolCallId) toolIndex.current.set(`${sessionId}:${toolCallId}`, index);
-        return next;
-      });
+    (sessionId: string, block: ContentBlock) => {
+      updateMessages(sessionId, (prev) => reduceAppendBlock(prev, block).messages);
     },
     [updateMessages],
   );
@@ -66,19 +54,9 @@ export function useMessageStore(): MessageStore {
     [updateMessages],
   );
 
-  const updateToolStatus = useCallback(
-    (
-      sessionId: string,
-      toolCallId: string,
-      next: "completed" | "failed",
-      result?: string,
-      title?: string,
-    ) => {
-      const index = toolIndex.current.get(`${sessionId}:${toolCallId}`);
-      if (index === undefined) return;
-      updateMessages(sessionId, (prev) =>
-        updateToolBlock(prev, toolCallId, { status: next, result, title }),
-      );
+  const updateToolCall = useCallback(
+    (sessionId: string, toolCallId: string, patch: ToolBlockPatch) => {
+      updateMessages(sessionId, (prev) => updateToolBlock(prev, toolCallId, patch));
     },
     [updateMessages],
   );
@@ -90,7 +68,6 @@ export function useMessageStore(): MessageStore {
     updateMessages,
     appendBlock,
     appendUserChunk,
-    updateToolStatus,
-    toolIndex,
+    updateToolCall,
   };
 }
