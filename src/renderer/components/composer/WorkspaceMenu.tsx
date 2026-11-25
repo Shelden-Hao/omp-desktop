@@ -34,10 +34,10 @@ export function WorkspaceMenu({
 	const options = recent.filter((dir) => dir !== current && dir !== defaultDir);
 
 	return (
-		<div className="omp-workspace">
+		<div className="omp-workspace-picker">
 			<button
 				type="button"
-				className={`omp-workspace-trigger ${open ? "active" : ""}`}
+				className={`omp-workspace-picker-trigger ${open ? "active" : ""}`}
 				onClick={onToggle}
 				disabled={disabled}
 				title={`工作目录：${current}`}
@@ -45,13 +45,13 @@ export function WorkspaceMenu({
 				aria-expanded={open}
 			>
 				<Icon name="folder" size={13} />
-				<span className="omp-workspace-current">{shortPath(current)}</span>
+				<span className="omp-workspace-picker-current">{shortPath(current)}</span>
 				<Icon name="chevron" size={12} />
 			</button>
 
 			{open && (
-				<div className="omp-workspace-menu" role="menu">
-					<span className="omp-workspace-label">在此目录执行</span>
+				<div className="omp-workspace-picker-menu" role="menu">
+					<span className="omp-workspace-picker-label">在此目录执行</span>
 					<button
 						type="button"
 						role="menuitemradio"
@@ -59,8 +59,8 @@ export function WorkspaceMenu({
 						onClick={() => onSelect(defaultDir)}
 					>
 						<Icon name="folder" size={13} />
-						<span className="omp-workspace-item-name">默认目录</span>
-						<span className="omp-workspace-item-path">{shortPath(defaultDir)}</span>
+						<span className="omp-workspace-picker-item-name">默认目录</span>
+						<span className="omp-workspace-picker-item-path">{shortPath(defaultDir)}</span>
 						{isDefault && <Icon name="check" size={13} />}
 					</button>
 					{options.map((dir) => (
@@ -72,15 +72,15 @@ export function WorkspaceMenu({
 							onClick={() => onSelect(dir)}
 						>
 							<Icon name="folder" size={13} />
-							<span className="omp-workspace-item-name">{dirName(dir)}</span>
-							<span className="omp-workspace-item-path">{shortPath(dir)}</span>
+							<span className="omp-workspace-picker-item-name">{dirName(dir)}</span>
+							<span className="omp-workspace-picker-item-path">{shortPath(dir)}</span>
 							{dir === current && <Icon name="check" size={13} />}
 						</button>
 					))}
-					<div className="omp-workspace-seg" />
+					<div className="omp-workspace-picker-seg" />
 					<button type="button" role="menuitem" onClick={onBrowse}>
 						<Icon name="plus" size={13} />
-						<span className="omp-workspace-item-name">选择文件夹…</span>
+						<span className="omp-workspace-picker-item-name">选择文件夹…</span>
 					</button>
 				</div>
 			)}

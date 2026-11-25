@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, statfsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
-import { app, clipboard, dialog, powerSaveBlocker, session, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, powerSaveBlocker, session, shell } from "electron";
+import type { OpenDialogOptions } from "electron";
 import type { LinkOpenMode, ProxyMode, RuntimeInfo, SystemInfoData } from "../../shared/types";
 
 export interface RuntimeSettings {
@@ -46,10 +47,15 @@ export async function openPath(path: string): Promise<{ ok: boolean; error?: str
 }
 
 export async function pickDirectory(): Promise<string | null> {
-	const result = await dialog.showOpenDialog({
-		title: "选择 omp 默认工作空间",
+	// 挂到当前窗口上：目录选择属于一次明确的用户操作，不应该让主窗口还能点
+	const parent = BrowserWindow.getFocusedWindow();
+	const options: OpenDialogOptions = {
+		title: "选择工作目录",
 		properties: ["openDirectory", "createDirectory"],
-	});
+	};
+	const result = parent
+		? await dialog.showOpenDialog(parent, options)
+		: await dialog.showOpenDialog(options);
 	if (result.canceled) return null;
 	return result.filePaths[0] ?? null;
 }

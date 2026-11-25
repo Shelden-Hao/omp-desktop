@@ -96,17 +96,22 @@ export function Composer({
 					</div>
 					<div className="omp-composer-tools">
 						<ApprovalMenu {...approval} />
-						<button
-							type="button"
-							className={`omp-model-trigger ${modelTrigger.open ? "active" : ""}`}
-							onClick={modelTrigger.onToggle}
-							title="模型与推理档位"
-							aria-label="模型与推理档位"
-						>
-							<Icon name="spark" size={13} />
-							<span className="omp-model-label">{modelTrigger.name || "模型"}</span>
-							<Icon name="chevron" size={12} />
-						</button>
+						<div className="omp-model-wrap">
+							<button
+								type="button"
+								className={`omp-model-trigger ${modelTrigger.open ? "active" : ""}`}
+								onClick={modelTrigger.onToggle}
+								title="模型与推理档位"
+								aria-label="模型与推理档位"
+								aria-haspopup="dialog"
+								aria-expanded={modelTrigger.open}
+							>
+								<Icon name="spark" size={13} />
+								<span className="omp-model-label">{modelTrigger.name || "模型"}</span>
+								<Icon name="chevron" size={12} />
+							</button>
+							<ModelPanel {...modelPanel} />
+						</div>
 						<ContextPanel {...context} />
 						{running ? (
 							<button
@@ -132,7 +137,6 @@ export function Composer({
 						)}
 					</div>
 				</div>
-				<ModelPanel {...modelPanel} />
 			</div>
 			<div className="omp-disclaimer">内容由 AI 生成，请核对重要信息</div>
 		</div>

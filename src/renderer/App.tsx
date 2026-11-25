@@ -205,7 +205,7 @@ export function App() {
 		onDismiss: () => setContextOpen(false),
 	});
 	useDismiss(workspaceOpen, {
-		ignore: [".omp-workspace"],
+		ignore: [".omp-workspace-picker"],
 		onDismiss: () => setWorkspaceOpen(false),
 	});
 
@@ -453,11 +453,12 @@ export function App() {
 										void connection.switchWorkspace(dir);
 									},
 									onBrowse: () => {
+										// 先收起菜单：原生目录框是模态的，留着只会让状态含糊
+										setWorkspaceOpen(false);
 										void (async () => {
 											try {
 												const dir = await window.desktop.system.pickDirectory();
 												if (!dir) return;
-												setWorkspaceOpen(false);
 												await connection.switchWorkspace(dir);
 											} catch (error) {
 												setStatus(`选择目录失败：${(error as Error).message}`);
