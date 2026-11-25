@@ -1,15 +1,17 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { DEFAULT_DOCS, type DocFile } from "../core/docs";
+import { fileName } from "../core/file-changes";
 
 /** 右侧预览栏的文档集合：对话里的代码块、本地文件都落成这里的 tab */
 export function useChatDocs(setStatus: (text: string) => void) {
   const [docs, setDocs] = useState<DocFile[]>(DEFAULT_DOCS);
   const [activeDoc, setActiveDoc] = useState<string | null>(null);
-  const [showPreview, setShowPreview] = useState(true);
+  // 默认收起：只有用户主动打开、或会话里出现新的文件改动时才展开
+  const [showPreview, setShowPreview] = useState(false);
 
   const currentDoc = docs.find((doc) => doc.key === activeDoc);
 
-  const openDoc = (name: string, content: string, path?: string, language?: string) => {
+  const openDoc = useCallback((name: string, content: string, path?: string, language?: string) => {
     const key = path || `snippet:${Math.random().toString(36).slice(2, 10)}`;
     setDocs((prev) => [
       ...prev.filter((doc) => doc.key !== key),
@@ -17,7 +19,15 @@ export function useChatDocs(setStatus: (text: string) => void) {
     ]);
     setActiveDoc(key);
     setShowPreview(true);
-  };
+  }, []);
+
+  /** 会话里生成/修改了文件：跟随到最新内容并展开预览（同一文件反复改只保留最新一份） */
+  const openChangedDoc = useCallback(
+    (path: string, content: string) => {
+      openDoc(fileName(path), content, path);
+    },
+    [openDoc],
+  );
 
   const openLocalFile = async () => {
     try {
@@ -61,6 +71,7 @@ export function useChatDocs(setStatus: (text: string) => void) {
     setShowPreview,
     currentDoc,
     openDoc,
+    openChangedDoc,
     openLocalFile,
     reloadDoc,
     closeDoc,

@@ -28,6 +28,7 @@ import {
 } from "../core/acp/event-router";
 import { applyConfigEffect, applyModeEffect, applyUsageEffect } from "../core/acp/apply-effect";
 import { parseContextReport } from "../core/context-report";
+import { type FileChange, fileChangeFromUpdate, findToolBlock } from "../core/file-changes";
 import { dirName } from "../core/format";
 import { loadSessionIndex } from "../core/session-boot";
 import { APPROVAL_LABEL } from "../core/labels";
@@ -58,6 +59,8 @@ interface AgentConnectionOptions {
   settingsRef: RefObject<DesktopSettings | null>;
   setSettings: Dispatch<SetStateAction<DesktopSettings>>;
   logAudit: AuditLogger;
+  /** 实时执行中生成/修改了文件时的回调（历史回放不触发） */
+  onFileChange?: (change: FileChange) => void;
 }
 
 export interface AgentConnection {
@@ -103,6 +106,7 @@ export function useAgentConnection({
   settingsRef,
   setSettings,
   logAudit,
+  onFileChange,
 }: AgentConnectionOptions): AgentConnection {
   const [client, setClient] = useState<AcpClient | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -287,7 +291,8 @@ export function useAgentConnection({
             }
             return;
           }
-          case "tool-update":
+          case "tool-update": {
+            const block = findToolBlock(messagesRef.current[sessionId], effect.toolCallId);
             updateToolCall(sessionId, effect.toolCallId, {
               status: effect.status,
               result: effect.result,
@@ -295,7 +300,13 @@ export function useAgentConnection({
               diffs: effect.diffs,
               locations: effect.locations,
             });
+            // 只在实时执行时跟随文件改动：session/load 的回放不算「这次生成的文件」
+            if (runningRef.current && onFileChange) {
+              const change = fileChangeFromUpdate(effect.diffs, effect.status, block);
+              if (change) onFileChange(change);
+            }
             return;
+          }
         }
         return;
       }
@@ -328,7 +339,7 @@ export function useAgentConnection({
         void runTool(runner(params) as Promise<{ ok: boolean; result?: unknown; error?: string }>);
       else event.respond({});
     },
-    [appendBlock, appendUserChunk, logAudit, runningRef, updateToolCall],
+    [appendBlock, appendUserChunk, logAudit, messagesRef, onFileChange, runningRef, updateToolCall],
   );
 
   // 事件处理器放 ref：epoch 重连时不该因为回调引用变化而断链

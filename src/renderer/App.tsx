@@ -21,6 +21,7 @@ import { useAgentPrompt } from "./hooks/use-agent-prompt";
 import { useChatDocs } from "./hooks/use-chat-docs";
 import { useChatScroll } from "./hooks/use-chat-scroll";
 import { useComposerEditor } from "./hooks/use-composer-editor";
+import type { FileChange } from "./core/file-changes";
 import { useDismiss } from "./hooks/use-dismiss";
 import { useMessageStore } from "./hooks/use-message-store";
 import { useRunningFlag } from "./hooks/use-running-flag";
@@ -103,6 +104,9 @@ export function App() {
 		return window.desktop.audit.add(entry).catch(() => undefined);
 	}, []);
 
+	// 预览栏的自动跟随：连接层只负责发现「实时改了哪个文件」，打开哪个 tab 交给 docsState
+	const fileChangeRef = useRef<(change: FileChange) => void>(() => {});
+
 	const connection = useAgentConnection({
 		store,
 		runningRef,
@@ -110,6 +114,7 @@ export function App() {
 		settingsRef,
 		setSettings,
 		logAudit,
+		onFileChange: (change) => fileChangeRef.current(change),
 	});
 	const { activeId, sessions, connected, status, setStatus, probeContext } = connection;
 	const { messagesBySession } = store;
@@ -120,6 +125,10 @@ export function App() {
 	);
 
 	const docsState = useChatDocs(setStatus);
+	const { openChangedDoc } = docsState;
+	useEffect(() => {
+		fileChangeRef.current = (change) => openChangedDoc(change.path, change.content);
+	}, [openChangedDoc]);
 	const search = useSessionSearch(messages);
 
 	// 输入区回车要发消息，而发送链路依赖输入区读文本：用 ref 打断这个循环
@@ -172,7 +181,7 @@ export function App() {
 			latest.set(session.cwd, Math.max(latest.get(session.cwd) ?? 0, session.ts ?? 0));
 		}
 		return [...latest]
-			.sort((left, right) => right[1] - left[1])
+			.toSorted((left, right) => right[1] - left[1])
 			.slice(0, 6)
 			.map(([dir]) => dir);
 	}, [sessions, settings.cwd]);
