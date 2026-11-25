@@ -15,8 +15,25 @@ import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { readModelContexts } from "./model-context";
 import { listMcpServers } from "./mcp";
 import {
+	deleteCustomModel,
+	listCustomModels,
+	saveCustomModel,
+	testModelConnection,
+	type ModelInput,
+} from "./models";
+import { appendAudit, clearAudit, exportAudit, readAudit, type AuditEntry } from "./audit";
+import {
+	POLICY_TOOLS,
+	readOmpConfig,
+	writeOmpConfig,
+	type OmpConfigSnapshot,
+	type ReplyStyle,
+	type ToolPolicy,
+} from "./omp-config";
+import {
 	applyLoginItem,
 	applyProxy,
+	detectRuntimes,
 	getSystemInfo,
 	openLink,
 	openPath,
@@ -60,6 +77,21 @@ interface AppSettings {
 	proxyUrl: string;
 	autoInstallTrustedSkills: boolean;
 	autoUpdateSkills: boolean;
+	/** 个性化：注入系统提示的称呼、名字、指令与工作背景 */
+	userNickname: string;
+	assistantName: string;
+	replyStyle: ReplyStyle;
+	customInstructions: string;
+	homeSuggestions: boolean;
+	/** 记忆与进化：写 omp 的 memory.backend / memories.enabled / autolearn.enabled */
+	memoryMode: "off" | "local";
+	autoLearnSkills: boolean;
+	workBackground: string;
+	/** 安全中心：敏感信息拦截、受限目录、逐工具审批策略、审计 */
+	sensitiveGuard: boolean;
+	restrictedFolders: string[];
+	toolPolicies: Partial<Record<string, ToolPolicy>>;
+	auditEnabled: boolean;
 }
 
 type ApprovalMode = "always-ask" | "always-ask-cached" | "write" | "yolo";
@@ -448,6 +480,18 @@ function defaultSettings(): AppSettings {
 		proxyUrl: "",
 		autoInstallTrustedSkills: false,
 		autoUpdateSkills: true,
+		userNickname: "",
+		assistantName: "",
+		replyStyle: "default",
+		customInstructions: "",
+		homeSuggestions: true,
+		memoryMode: "off",
+		autoLearnSkills: false,
+		workBackground: "",
+		sensitiveGuard: true,
+		restrictedFolders: [],
+		toolPolicies: {},
+		auditEnabled: true,
 	};
 }
 
@@ -478,10 +522,39 @@ function loadSettings(): AppSettings {
 				"openAtLogin",
 				"autoInstallTrustedSkills",
 				"autoUpdateSkills",
+				"homeSuggestions",
+				"autoLearnSkills",
+				"sensitiveGuard",
+				"auditEnabled",
 			] as const) {
 				if (typeof saved[key] !== "boolean") saved[key] = defaults[key];
 			}
 			if (typeof saved.proxyUrl !== "string") saved.proxyUrl = defaults.proxyUrl;
+			for (const key of [
+				"userNickname",
+				"assistantName",
+				"customInstructions",
+				"workBackground",
+			] as const) {
+				if (typeof saved[key] !== "string") saved[key] = defaults[key];
+			}
+			if (!["default", "friendly", "pragmatic", "none"].includes(saved.replyStyle ?? "")) {
+				saved.replyStyle = defaults.replyStyle;
+			}
+			if (!["off", "local"].includes(saved.memoryMode ?? "")) {
+				saved.memoryMode = defaults.memoryMode;
+			}
+			saved.restrictedFolders = Array.isArray(saved.restrictedFolders)
+				? saved.restrictedFolders.filter((item): item is string => typeof item === "string")
+				: defaults.restrictedFolders;
+			const policies: Partial<Record<string, ToolPolicy>> = {};
+			if (saved.toolPolicies && typeof saved.toolPolicies === "object") {
+				for (const tool of POLICY_TOOLS) {
+					const value = (saved.toolPolicies as Record<string, unknown>)[tool];
+					if (value === "allow" || value === "prompt" || value === "deny") policies[tool] = value;
+				}
+			}
+			saved.toolPolicies = policies;
 			return { ...defaults, ...saved };
 		}
 	} catch {
@@ -499,6 +572,69 @@ async function applyRuntimeSettings() {
 	applyLoginItem(settings.openAtLogin);
 	syncPowerBlockers(settings, agent !== null);
 	await applyProxy(settings);
+}
+
+/** 传 omp CLI 调用所需的宿主信息（路径 + 代理）。 */
+function host() {
+	return {
+		bunPath: settings.bunPath,
+		ompCliPath: settings.ompCliPath,
+		cwd: settings.cwd,
+		proxyMode: settings.proxyMode,
+		proxyUrl: settings.proxyUrl,
+	};
+}
+
+/**
+ * 把个性化与安全设置合成一段追加系统提示，通过 --append-system-prompt 传给 omp。
+ * omp 没有独立的「称呼/指令」配置项，这是唯一真实生效的注入点。
+ */
+function composeSystemPrompt(): string {
+	const parts: string[] = [];
+	const name = settings.assistantName.trim();
+	const nickname = settings.userNickname.trim();
+	if (name) parts.push(`你的名字是「${name}」，被问到时用这个名字自称。`);
+	if (nickname) parts.push(`称呼用户为「${nickname}」。`);
+	const background = settings.workBackground.trim();
+	if (background) parts.push(`【用户工作背景】\n${background}`);
+	const instructions = settings.customInstructions.trim();
+	if (instructions) parts.push(`【用户长期指令】\n${instructions}`);
+	return parts.join("\n\n");
+}
+
+/**
+ * 把应用内设置同步到 omp 的 config.yml：只写真正有变化的键，
+ * 避免每次保存都跑一堆 CLI 子进程。
+ */
+async function applyOmpSettings(): Promise<{ ok: boolean; error?: string }> {
+	const current = readOmpConfig();
+	const desired: Array<[string, string]> = [];
+	const compare = <T>(key: string, currentValue: T, nextValue: T) => {
+		if (currentValue !== nextValue) desired.push([key, String(nextValue)]);
+	};
+
+	compare("personality", current.personality, settings.replyStyle);
+	compare("memory.backend", current.memoryBackend, settings.memoryMode);
+	compare("memories.enabled", current.memoriesEnabled, settings.memoryMode === "local");
+	compare("autolearn.enabled", current.autoLearn, settings.autoLearnSkills);
+	compare("tools.approvalMode", current.approvalMode, settings.approvalMode);
+
+	const folders = settings.restrictedFolders.filter(Boolean);
+	if (JSON.stringify(folders) !== JSON.stringify(current.restrictedFolders)) {
+		desired.push(["tools.restrictedFolders", JSON.stringify(folders)]);
+	}
+	const policies: Record<string, ToolPolicy> = {};
+	for (const tool of POLICY_TOOLS) {
+		const value = settings.toolPolicies[tool];
+		if (value) policies[tool] = value;
+	}
+	if (JSON.stringify(policies) !== JSON.stringify(current.approval)) {
+		desired.push(["tools.approval", JSON.stringify(policies)]);
+	}
+
+	if (desired.length === 0) return { ok: true };
+	const result = await writeOmpConfig(host(), desired);
+	return { ok: result.ok, error: result.error };
 }
 
 /**
@@ -584,16 +720,15 @@ function startAgent(): { ok: boolean; error?: string } {
 	}
 
 	try {
-		agent = spawn(
-			settings.bunPath,
-			[settings.ompCliPath, "acp", `--approval-mode=${settings.approvalMode}`],
-			{
-				cwd: settings.cwd,
-				env: proxyEnv(settings.proxyMode, settings.proxyUrl),
-				stdio: ["pipe", "pipe", "pipe"],
-				windowsHide: true,
-			},
-		);
+		const args = [settings.ompCliPath, "acp", `--approval-mode=${settings.approvalMode}`];
+		const appended = composeSystemPrompt();
+		if (appended) args.push(`--append-system-prompt=${appended}`);
+		agent = spawn(settings.bunPath, args, {
+			cwd: settings.cwd,
+			env: proxyEnv(settings.proxyMode, settings.proxyUrl),
+			stdio: ["pipe", "pipe", "pipe"],
+			windowsHide: true,
+		});
 	} catch (e) {
 		return { ok: false, error: `启动 omp 失败：${(e as Error).message}` };
 	}
@@ -690,9 +825,37 @@ app.whenReady().then(() => {
 		nativeTheme.themeSource = theme === "system" ? "system" : theme;
 		saveSettings(settings);
 		await applyRuntimeSettings();
-		return settings;
+		// omp 侧配置（记忆、审批、受限目录、个性）同步写入；失败不回滚本地设置，
+		// 但把原因带回渲染层，避免“看起来生效、其实没写进去”。
+		const sync = await applyOmpSettings();
+		if (!sync.ok) console.error("apply omp settings failed", sync.error);
+		return { ...settings, ompSyncError: sync.ok ? "" : (sync.error ?? "同步 omp 配置失败") };
 	});
 	ipcMain.handle("system:info", () => getSystemInfo());
+	ipcMain.handle("system:runtimes", () => detectRuntimes(readOmpConfig().shellPath));
+	ipcMain.handle("omp:config", () => {
+		const snapshot: OmpConfigSnapshot = readOmpConfig();
+		return { ...snapshot, configPath: join(homedir(), ".omp", "agent", "config.yml") };
+	});
+	ipcMain.handle("omp:set-config", (_e, entries: Array<[string, string]>) =>
+		writeOmpConfig(host(), Array.isArray(entries) ? entries : []),
+	);
+	ipcMain.handle("models:list", () => listCustomModels());
+	ipcMain.handle("models:save", (_e, input: ModelInput) => saveCustomModel(input));
+	ipcMain.handle("models:remove", (_e, provider: string, id: string) =>
+		deleteCustomModel(provider, id),
+	);
+	ipcMain.handle("models:test", (_e, input: { baseUrl: string; apiKey: string; model: string }) =>
+		testModelConnection(input),
+	);
+	ipcMain.handle("models:set-role", (_e, role: string, value: string) => {
+		if (!/^[a-zA-Z]+$/.test(role)) return { ok: false, error: "角色名不合法" };
+		return writeOmpConfig(host(), [[`modelRoles.${role}`, value]]);
+	});
+	ipcMain.handle("audit:list", () => readAudit());
+	ipcMain.handle("audit:add", (_e, entry: Partial<AuditEntry>) => appendAudit(entry ?? {}));
+	ipcMain.handle("audit:clear", () => clearAudit());
+	ipcMain.handle("audit:export", () => exportAudit());
 	ipcMain.handle("system:open-path", (_e, path: string) => openPath(path));
 	ipcMain.handle("system:pick-directory", () => pickDirectory());
 	ipcMain.handle("links:open", (_e, url: string) => openLink(url, settings.linkOpenMode));

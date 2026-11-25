@@ -8,6 +8,7 @@ import {
 	AcpClient,
 	type AcpEvent,
 	type ApprovalMode,
+	type AuditEntry,
 	type ChatMessage,
 	type ContentBlock,
 	type ContextPart,
@@ -101,6 +102,28 @@ function shortPath(path: string) {
 function dirName(path: string) {
 	const parts = path.replace(/\\/g, "/").split("/").filter(Boolean);
 	return parts[parts.length - 1] || "工作目录";
+}
+
+/**
+ * 发送前的敏感信息体检。只做本地正则匹配，不外发任何内容；
+ * 命中后由用户决定是否仍然发送，避免把密钥贴进对话。
+ */
+const SENSITIVE_PATTERNS: Array<{ label: string; re: RegExp }> = [
+	{ label: "私钥文件内容", re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
+	{ label: "GitHub Token", re: /\bgh[pousr]_[A-Za-z0-9]{20,}\b/ },
+	{ label: "云厂商 AccessKey", re: /\bAKIA[0-9A-Z]{16}\b/ },
+	{ label: "API Key", re: /\b(?:sk|pk|ak)-[A-Za-z0-9_-]{16,}\b/ },
+	{
+		label: "口令 / 密钥字段",
+		re: /(api[_-]?key|secret[_-]?key|access[_-]?token|password|passwd|pwd)\s*[:=：]\s*\S{8,}/i,
+	},
+];
+
+function detectSensitive(text: string): string | null {
+	for (const pattern of SENSITIVE_PATTERNS) {
+		if (pattern.re.test(text)) return pattern.label;
+	}
+	return null;
 }
 
 function relativeTime(ts?: number) {
@@ -1116,8 +1139,22 @@ export function App() {
 		proxyUrl: "",
 		autoInstallTrustedSkills: false,
 		autoUpdateSkills: true,
+		userNickname: "",
+		assistantName: "",
+		replyStyle: "default",
+		customInstructions: "",
+		homeSuggestions: true,
+		memoryMode: "off",
+		autoLearnSkills: false,
+		workBackground: "",
+		sensitiveGuard: true,
+		restrictedFolders: [],
+		toolPolicies: {},
+		auditEnabled: true,
 	});
 	const [permission, setPermission] = useState<PermissionState | null>(null);
+	/** 敏感信息拦截：命中后暂停发送，等用户确认 */
+	const [sensitiveHit, setSensitiveHit] = useState<{ label: string; text: string } | null>(null);
 	const [docs, setDocs] = useState<DocFile[]>(DEFAULT_DOCS);
 	const [activeDoc, setActiveDoc] = useState<string | null>(null);
 	const [showPreview, setShowPreview] = useState(true);
@@ -1171,6 +1208,8 @@ export function App() {
 	const contextBusyRef = useRef(false);
 	const approvalRef = useRef<HTMLSpanElement>(null);
 	const contextRef = useRef<HTMLSpanElement>(null);
+	/** handleEvent 是 useCallback，读最新设置要走 ref，避免闭包拿到旧值 */
+	const settingsRef = useRef<DesktopSettings | null>(null);
 
 	const messages = useMemo(
 		() => (activeId ? messagesBySession[activeId] || [] : []),
@@ -1461,6 +1500,16 @@ export function App() {
 	useEffect(() => {
 		pendingPermissionRef.current = permission;
 	}, [permission]);
+
+	useEffect(() => {
+		settingsRef.current = settings;
+	}, [settings]);
+
+	/** 审计日志：只记录客户端真实发生的高风险动作，关闭时静默跳过 */
+	const logAudit = useCallback((entry: Partial<AuditEntry>) => {
+		if (!settingsRef.current?.auditEnabled) return Promise.resolve();
+		return window.desktop.audit.add(entry).catch(() => undefined);
+	}, []);
 
 	useEffect(() => {
 		runningRef.current = running;
@@ -2005,6 +2054,21 @@ export function App() {
 						},
 						toolCallId,
 					);
+					// 只记录实时执行的动作：session/load 会回放历史工具调用，不能被当成新事件
+					if (runningRef.current) {
+						void logAudit({
+							category: /bash|shell|exec|terminal/i.test(`${toolName} ${toolKind}`)
+								? "命令安全"
+								: /read|write|edit|fs|grep|glob/i.test(`${toolName} ${toolKind}`)
+									? "文件安全"
+									: /fetch|http|web|browser/i.test(`${toolName} ${toolKind}`)
+										? "网络访问"
+										: "模型行为",
+							action: `调用工具 ${toolName}`,
+							detail: toolTitle || formatToolInput(update.rawInput).slice(0, 200),
+							level: "info",
+						});
+					}
 				} else if (kind === "tool_call_update") {
 					const toolCallId = update.toolCallId as string;
 					const next = update.status as string;
@@ -2051,6 +2115,12 @@ export function App() {
 						(params.options as Array<{ optionId: string; name: string; kind: string }>) || [],
 					respond: event.respond,
 				});
+				void logAudit({
+					category: "权限审批",
+					action: "请求确认工具操作",
+					detail: toolCall?.title || "",
+					level: "warn",
+				});
 				return;
 			}
 
@@ -2091,7 +2161,7 @@ export function App() {
 					event.respond({});
 			}
 		},
-		[appendBlock, appendUserChunk, updateToolStatus, updateMessages],
+		[appendBlock, appendUserChunk, updateToolStatus, updateMessages, logAudit],
 	);
 
 	useEffect(() => {
@@ -2190,13 +2260,26 @@ export function App() {
 		if (!el) return;
 		// 跟随 messages 引用而非 length：流式文本是原地追加到同一个 agent 消息里的，长度不变
 		el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
-	}, [messages, permission, running]);
+	}, [messages, permission, running, logAudit]);
 
-	const send = async (override?: string) => {
+	const send = async (override?: string, confirmed = false) => {
 		// inline chip 已在 readEditorText 里还原成 omp 认识的 /skill:<name>；重试走 override 不再读输入区
 		const text = (override ?? readEditorText()).trim();
 		// 正在刷新上下文用量时先让出，避免两个 prompt 并发打到同一会话
 		if (!client || !activeId || !text || running || contextBusyRef.current) return;
+		if (!confirmed && settings.sensitiveGuard) {
+			const hit = detectSensitive(text);
+			if (hit) {
+				setSensitiveHit({ label: hit, text });
+				void logAudit({
+					category: "敏感保护",
+					action: "发送前拦截疑似敏感信息",
+					detail: hit,
+					level: "block",
+				});
+				return;
+			}
+		}
 		const sessionId = activeId;
 		const startedAt = Date.now();
 		const userMessageId = uid();
@@ -2384,7 +2467,13 @@ export function App() {
 	const saveSettings = async (next: DesktopSettings) => {
 		try {
 			const saved = await window.desktop.settings.set(next);
-			setSettings(saved);
+			const { ompSyncError, ...rest } = saved;
+			setSettings(rest as DesktopSettings);
+			if (ompSyncError) {
+				// 本地已保存，但 omp 配置没写进去；面板保持打开让用户看到原因
+				setStatus(`omp 配置同步失败：${ompSyncError}`);
+				throw new Error(ompSyncError);
+			}
 			setShowSettings(false);
 			setStatus("设置已保存");
 		} catch (error) {
@@ -2900,25 +2989,26 @@ export function App() {
 											<h2>把任务交给 omp</h2>
 											<p>它会在当前工作目录中读取文件、执行命令，并把过程展现在这里。</p>
 											<div className="omp-empty-hints">
-												{[
-													"解释当前目录的代码结构",
-													"帮我修复一个失败的测试",
-													"梳理这个项目的待办事项",
-												].map((hint) => (
-													<button
-														key={hint}
-														type="button"
-														onClick={() => {
-															if (!getEditorRange()) focusEditor();
-															insertTextAtCursor(hint);
-															syncFromEditor();
-															editorRef.current?.focus();
-														}}
-													>
-														{hint}
-														<Icon name="chevron-right" size={12} />
-													</button>
-												))}
+												{settings.homeSuggestions &&
+													[
+														"解释当前目录的代码结构",
+														"帮我修复一个失败的测试",
+														"梳理这个项目的待办事项",
+													].map((hint) => (
+														<button
+															key={hint}
+															type="button"
+															onClick={() => {
+																if (!getEditorRange()) focusEditor();
+																insertTextAtCursor(hint);
+																syncFromEditor();
+																editorRef.current?.focus();
+															}}
+														>
+															{hint}
+															<Icon name="chevron-right" size={12} />
+														</button>
+													))}
 											</div>
 										</div>
 									)}
@@ -3705,6 +3795,41 @@ export function App() {
 					</div>
 				</main>
 			</div>
+
+			{sensitiveHit && (
+				<div className="omp-modal-layer" role="dialog" aria-modal="true" aria-label="敏感信息确认">
+					<div className="omp-modal">
+						<div className="omp-modal-icon warning">
+							<Icon name="shield" size={18} />
+						</div>
+						<h3>检测到疑似敏感信息</h3>
+						<p>
+							这条消息里包含「{sensitiveHit.label}
+							」。发送后会作为对话内容传给模型服务商，确认继续吗？
+						</p>
+						<div className="omp-modal-actions">
+							<button type="button" className="secondary" onClick={() => setSensitiveHit(null)}>
+								返回修改
+							</button>
+							<button
+								type="button"
+								className="primary"
+								onClick={() => {
+									const pending = sensitiveHit;
+									setSensitiveHit(null);
+									// 与正常发送保持一致：确认发送后清空输入区与 chip
+									if (editorRef.current) editorRef.current.innerHTML = "";
+									setInput("");
+									setSkillChips([]);
+									void send(pending.text, true);
+								}}
+							>
+								仍然发送
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
 
 			{permission && (
 				<div className="omp-modal-layer" role="dialog" aria-modal="true" aria-label="权限确认">

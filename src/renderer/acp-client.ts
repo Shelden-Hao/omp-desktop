@@ -17,6 +17,14 @@ export type ApprovalMode = "always-ask" | "always-ask-cached" | "write" | "yolo"
 
 export type LinkOpenMode = "ask" | "browser" | "copy";
 export type ProxyMode = "direct" | "system" | "manual";
+/** 个性化回复风格，直接映射 omp 的 model.personality */
+export type ReplyStyle = "default" | "friendly" | "pragmatic" | "none";
+/** 记忆后端，映射 omp 的 memory.backend */
+export type MemoryMode = "off" | "local";
+export type ToolPolicy = "allow" | "prompt" | "deny";
+
+export const POLICY_TOOLS = ["bash", "write", "edit", "read"] as const;
+export type PolicyTool = (typeof POLICY_TOOLS)[number];
 
 export interface DesktopSettings {
   ompCliPath: string;
@@ -34,6 +42,89 @@ export interface DesktopSettings {
   proxyUrl: string;
   autoInstallTrustedSkills: boolean;
   autoUpdateSkills: boolean;
+  /** 个性化：omp 对你的称呼 */
+  userNickname: string;
+  /** 个性化：助手名字 */
+  assistantName: string;
+  /** 个性化：回复风格 */
+  replyStyle: ReplyStyle;
+  /** 个性化：长期指令，注入系统提示 */
+  customInstructions: string;
+  /** 个性化：首页任务推荐 */
+  homeSuggestions: boolean;
+  /** 记忆与进化 */
+  memoryMode: MemoryMode;
+  autoLearnSkills: boolean;
+  /** 工作背景，注入系统提示 */
+  workBackground: string;
+  /** 安全中心 */
+  sensitiveGuard: boolean;
+  restrictedFolders: string[];
+  toolPolicies: Partial<Record<PolicyTool, ToolPolicy>>;
+  auditEnabled: boolean;
+}
+
+export interface RuntimeInfo {
+  id: string;
+  name: string;
+  version: string;
+  path: string;
+  available: boolean;
+  note: string;
+}
+
+export interface OmpConfigData {
+  memoryBackend: string;
+  memoriesEnabled: boolean;
+  autoLearn: boolean;
+  personality: string;
+  approvalMode: string;
+  approval: Record<string, string>;
+  restrictedFolders: string[];
+  modelRoles: Record<string, string>;
+  configPath: string;
+}
+
+export interface CustomModelEntry {
+  provider: string;
+  id: string;
+  name: string;
+  baseUrl: string;
+  api: string;
+  apiKey: string;
+  contextWindow?: number;
+  maxTokens?: number;
+  supportsTools: boolean;
+  reasoning: boolean;
+  vision: boolean;
+}
+
+export interface CustomModelState {
+  path: string;
+  models: CustomModelEntry[];
+  roles: Record<string, string>;
+}
+
+export interface ModelInputData {
+  provider: string;
+  id: string;
+  name: string;
+  baseUrl: string;
+  api?: string;
+  apiKey?: string;
+  contextWindow?: number;
+  maxTokens?: number;
+  supportsTools?: boolean;
+  reasoning?: boolean;
+  vision?: boolean;
+}
+
+export interface AuditEntry {
+  ts: number;
+  category: string;
+  action: string;
+  detail: string;
+  level: "info" | "warn" | "block";
 }
 
 export interface SystemInfoData {
@@ -187,6 +278,7 @@ export interface AcpBridge {
     info(): Promise<SystemInfoData>;
     openPath(path: string): Promise<{ ok: boolean; error?: string }>;
     pickDirectory(): Promise<string | null>;
+    runtimes(): Promise<RuntimeInfo[]>;
   };
   links: {
     open(url: string): Promise<void>;
@@ -198,7 +290,8 @@ export interface AcpBridge {
   };
   settings: {
     get(): Promise<DesktopSettings>;
-    set(next: Partial<DesktopSettings>): Promise<DesktopSettings>;
+    /** ompSyncError 表示本地已保存、但写 omp config.yml 失败的原因 */
+    set(next: Partial<DesktopSettings>): Promise<DesktopSettings & { ompSyncError?: string }>;
   };
   sessions: {
     get(): Promise<StoredSession[]>;
@@ -206,6 +299,25 @@ export interface AcpBridge {
   };
   models: {
     context(): Promise<ModelContextInfo[]>;
+    list(): Promise<CustomModelState>;
+    save(input: ModelInputData): Promise<CustomModelState>;
+    remove(provider: string, id: string): Promise<CustomModelState>;
+    test(input: { baseUrl: string; apiKey: string; model: string }): Promise<{
+      ok: boolean;
+      status?: number;
+      message: string;
+    }>;
+    setRole(role: string, value: string): Promise<{ ok: boolean; error?: string }>;
+  };
+  omp: {
+    config(): Promise<OmpConfigData>;
+    setConfig(entries: Array<[string, string]>): Promise<{ ok: boolean; error?: string }>;
+  };
+  audit: {
+    list(): Promise<AuditEntry[]>;
+    add(entry: Partial<AuditEntry>): Promise<AuditEntry>;
+    clear(): Promise<{ ok: boolean }>;
+    export(): Promise<{ ok: boolean; path?: string; error?: string }>;
   };
   files: {
     open(): Promise<OpenedFile | null>;

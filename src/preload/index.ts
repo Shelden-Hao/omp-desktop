@@ -1,9 +1,14 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
+	AuditEntry,
+	CustomModelState,
 	DesktopSettings,
 	McpConfigInfo,
 	ModelContextInfo,
+	ModelInputData,
+	OmpConfigData,
 	OpenedFile,
+	RuntimeInfo,
 	SkillCommandReply,
 	SkillListData,
 	SkillScope,
@@ -19,7 +24,7 @@ import type {
 export interface DesktopBridge {
 	settings: {
 		get(): Promise<DesktopSettings>;
-		set(next: Partial<DesktopSettings>): Promise<DesktopSettings>;
+		set(next: Partial<DesktopSettings>): Promise<DesktopSettings & { ompSyncError?: string }>;
 	};
 	sessions: {
 		get(): Promise<StoredSession[]>;
@@ -27,6 +32,25 @@ export interface DesktopBridge {
 	};
 	models: {
 		context(): Promise<ModelContextInfo[]>;
+		list(): Promise<CustomModelState>;
+		save(input: ModelInputData): Promise<CustomModelState>;
+		remove(provider: string, id: string): Promise<CustomModelState>;
+		test(input: { baseUrl: string; apiKey: string; model: string }): Promise<{
+			ok: boolean;
+			status?: number;
+			message: string;
+		}>;
+		setRole(role: string, value: string): Promise<{ ok: boolean; error?: string }>;
+	};
+	omp: {
+		config(): Promise<OmpConfigData>;
+		setConfig(entries: Array<[string, string]>): Promise<{ ok: boolean; error?: string }>;
+	};
+	audit: {
+		list(): Promise<AuditEntry[]>;
+		add(entry: Partial<AuditEntry>): Promise<AuditEntry>;
+		clear(): Promise<{ ok: boolean }>;
+		export(): Promise<{ ok: boolean; path?: string; error?: string }>;
 	};
 	files: {
 		open(): Promise<OpenedFile | null>;
@@ -74,6 +98,7 @@ export interface DesktopBridge {
 		info(): Promise<SystemInfoData>;
 		openPath(path: string): Promise<{ ok: boolean; error?: string }>;
 		pickDirectory(): Promise<string | null>;
+		runtimes(): Promise<RuntimeInfo[]>;
 	};
 	links: {
 		open(url: string): Promise<void>;
@@ -99,6 +124,21 @@ const bridge: DesktopBridge = {
 	},
 	models: {
 		context: () => ipcRenderer.invoke("models:context"),
+		list: () => ipcRenderer.invoke("models:list"),
+		save: (input) => ipcRenderer.invoke("models:save", input),
+		remove: (provider, id) => ipcRenderer.invoke("models:remove", provider, id),
+		test: (input) => ipcRenderer.invoke("models:test", input),
+		setRole: (role, value) => ipcRenderer.invoke("models:set-role", role, value),
+	},
+	omp: {
+		config: () => ipcRenderer.invoke("omp:config"),
+		setConfig: (entries) => ipcRenderer.invoke("omp:set-config", entries),
+	},
+	audit: {
+		list: () => ipcRenderer.invoke("audit:list"),
+		add: (entry) => ipcRenderer.invoke("audit:add", entry),
+		clear: () => ipcRenderer.invoke("audit:clear"),
+		export: () => ipcRenderer.invoke("audit:export"),
 	},
 	files: {
 		open: () => ipcRenderer.invoke("file:open"),
@@ -139,6 +179,7 @@ const bridge: DesktopBridge = {
 		info: () => ipcRenderer.invoke("system:info"),
 		openPath: (path) => ipcRenderer.invoke("system:open-path", path),
 		pickDirectory: () => ipcRenderer.invoke("system:pick-directory"),
+		runtimes: () => ipcRenderer.invoke("system:runtimes"),
 	},
 	links: {
 		open: (url) => ipcRenderer.invoke("links:open", url),
