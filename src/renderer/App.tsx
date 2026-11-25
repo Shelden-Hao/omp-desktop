@@ -39,22 +39,20 @@ import {
 	type TimeFilter,
 } from "./core/session-filters";
 import { Block } from "./components/chat/ContentBlock";
-import { ContextMeter, ContextRing } from "./components/chat/ContextMeter";
 import { MessageActions } from "./components/chat/MessageActions";
+import { ApprovalMenu } from "./components/composer/ApprovalMenu";
+import { ContextPanel } from "./components/composer/ContextPanel";
+import { EntryMenu, type EntrySubmenu } from "./components/composer/EntryMenu";
+import { type ModelRow, ModelPanel } from "./components/composer/ModelPanel";
+import { SuggestMenu } from "./components/composer/SuggestMenu";
 import { PreviewPane } from "./components/layout/PreviewPane";
 import { Sidebar } from "./components/layout/Sidebar";
 import { TitleBar } from "./components/layout/TitleBar";
 import { PermissionDialog } from "./components/modals/PermissionDialog";
 import { SensitiveDialog } from "./components/modals/SensitiveDialog";
 import { DEFAULT_DOCS, type DocFile } from "./core/docs";
-import { formatContext, formatDuration, formatTokens, pickLabel, shortPath } from "./core/format";
-import {
-	APPROVAL_HINT,
-	APPROVAL_LABEL,
-	APPROVAL_OPTIONS,
-	MODE_LABEL,
-	THINKING_LABEL,
-} from "./core/labels";
+import { formatDuration, pickLabel, shortPath } from "./core/format";
+import { APPROVAL_LABEL, THINKING_LABEL } from "./core/labels";
 import {
 	extractPathsFromMessages,
 	extractUrlsFromMessages,
@@ -74,20 +72,6 @@ interface PermissionState {
 }
 
 const uid = () => Math.random().toString(36).slice(2, 10);
-
-interface ModelRowOption {
-	value: string;
-	label: string;
-}
-
-interface ModelRow {
-	id: string;
-	label: string;
-	valueLabel: string;
-	currentValue?: string;
-	options?: ModelRowOption[];
-	onSelect?: (value: string) => void;
-}
 
 export function App() {
 	const [client, setClient] = useState<AcpClient | null>(null);
@@ -162,7 +146,7 @@ export function App() {
 	const [resourceQuery, setResourceQuery] = useState("");
 	const [resourceActive, setResourceActive] = useState(0);
 	const [entryMenuOpen, setEntryMenuOpen] = useState(false);
-	const [entrySubmenu, setEntrySubmenu] = useState<"mode" | "skills" | "connectors" | null>(null);
+	const [entrySubmenu, setEntrySubmenu] = useState<EntrySubmenu>(null);
 	const [mcpConfig, setMcpConfig] = useState<McpConfigInfo | null>(null);
 	const entryMenuRef = useRef<HTMLSpanElement>(null);
 
@@ -1453,7 +1437,6 @@ export function App() {
 	const currentContext = modelOption?.currentValue
 		? modelContexts[modelOption.currentValue]
 		: undefined;
-	const activeRow = modelRows.find((row) => row.id === openModelRow);
 
 	return (
 		<div className="omp-app">
@@ -1733,94 +1716,49 @@ export function App() {
 							<div className="omp-composer-wrap">
 								<div className="omp-composer">
 									{resourceSuggestOpen && (
-										<div
-											className="omp-skill-suggest"
-											role="listbox"
-											aria-label="资源联想"
-											onMouseDown={(event) => event.preventDefault()}
-										>
-											<div className="omp-skill-suggest-head">
-												引用资源 ({resourceCandidates.length})
-											</div>
-											{resourceCandidates.length === 0 ? (
-												<div className="omp-skill-suggest-empty">
-													暂无可引用的文件/网址，可直接粘贴网址或选择本地文件
-												</div>
-											) : (
-												resourceCandidates.map((candidate, index) => (
-													<button
-														key={`${candidate.group}:${candidate.value}`}
-														type="button"
-														role="option"
-														aria-selected={index === resourceActive}
-														className={`omp-skill-suggest-item ${
-															index === resourceActive ? "active" : ""
-														}`}
-														onMouseEnter={() => setResourceActive(index)}
-														onClick={() => applyResource(candidate)}
-													>
-														<span className="omp-skill-suggest-icon">
-															{candidate.group === "网址" ? (
-																<Icon name="link" size={13} />
-															) : (
-																<Icon name="file" size={13} />
-															)}
-														</span>
-														<span className="omp-skill-suggest-main">
-															<strong>{candidate.label}</strong>
-															<span>
-																{candidate.group} · {candidate.detail}
-															</span>
-														</span>
-													</button>
-												))
-											)}
-											<button
-												type="button"
-												className="omp-skill-suggest-action"
-												onClick={() => {
+										<SuggestMenu
+											label="引用资源"
+											count={resourceCandidates.length}
+											empty="暂无可引用的文件/网址，可直接粘贴网址或选择本地文件"
+											entries={resourceCandidates.map((candidate) => ({
+												key: `${candidate.group}:${candidate.value}`,
+												icon:
+													candidate.group === "网址" ? (
+														<Icon name="link" size={13} />
+													) : (
+														<Icon name="file" size={13} />
+													),
+												title: candidate.label,
+												detail: `${candidate.group} · ${candidate.detail}`,
+											}))}
+											activeIndex={resourceActive}
+											onHover={setResourceActive}
+											onSelect={(index) => applyResource(resourceCandidates[index])}
+											footer={{
+												icon: "folder",
+												label: "从本地选择文件…",
+												onSelect: () => {
 													setResourceSuggestOpen(false);
 													void insertFileReference();
-												}}
-											>
-												<Icon name="folder" size={13} /> 从本地选择文件…
-											</button>
-										</div>
+												},
+											}}
+										/>
 									)}
 									{skillSuggestOpen && (
-										<div
-											className="omp-skill-suggest"
-											role="listbox"
-											aria-label="技能联想"
-											onMouseDown={(event) => event.preventDefault()}
-										>
-											<div className="omp-skill-suggest-head">技能 ({skillSuggestions.length})</div>
-											{skillSuggestions.length === 0 ? (
-												<div className="omp-skill-suggest-empty">没有匹配的已安装技能</div>
-											) : (
-												skillSuggestions.map((skill, index) => (
-													<button
-														key={skill.name}
-														type="button"
-														role="option"
-														aria-selected={index === skillActive}
-														className={`omp-skill-suggest-item ${
-															index === skillActive ? "active" : ""
-														}`}
-														onMouseEnter={() => setSkillActive(index)}
-														onClick={() => applySkill(skill.name)}
-													>
-														<span className="omp-skill-suggest-icon">
-															{skill.name.slice(0, 1).toUpperCase()}
-														</span>
-														<span className="omp-skill-suggest-main">
-															<strong>{skill.name}</strong>
-															<span>{skill.description}</span>
-														</span>
-													</button>
-												))
-											)}
-										</div>
+										<SuggestMenu
+											label="技能"
+											count={skillSuggestions.length}
+											empty="没有匹配的已安装技能"
+											entries={skillSuggestions.map((skill) => ({
+												key: skill.name,
+												icon: skill.name.slice(0, 1).toUpperCase(),
+												title: skill.name,
+												detail: skill.description,
+											}))}
+											activeIndex={skillActive}
+											onHover={setSkillActive}
+											onSelect={(index) => applySkill(skillSuggestions[index].name)}
+										/>
 									)}
 									<div
 										ref={editorRef}
@@ -1846,234 +1784,41 @@ export function App() {
 									/>
 									<div className="omp-composer-footer">
 										<div className="omp-composer-hint">
-											<span className="omp-entry-wrap" ref={entryMenuRef}>
-												<button
-													type="button"
-													className={`omp-reference ${entryMenuOpen ? "active" : ""}`}
-													onClick={() => {
-														setEntrySubmenu(null);
-														setEntryMenuOpen((value) => !value);
-													}}
-													title="添加文件、引用资源、模式、技能与连接器"
-													aria-label="添加"
-													aria-haspopup="menu"
-													aria-expanded={entryMenuOpen}
-												>
-													<Icon name="plus" size={15} />
-												</button>
-												{entryMenuOpen && (
-													<div className="omp-entry-menu" role="menu" aria-label="添加与引用">
-														<button
-															type="button"
-															role="menuitem"
-															className="omp-entry-item"
-															onClick={() => {
-																setEntryMenuOpen(false);
-																void insertFileReference();
-															}}
-														>
-															<Icon name="folder" size={14} />
-															<span>添加文件</span>
-															<span className="omp-entry-item-hint">从本地选择</span>
-														</button>
-														<button
-															type="button"
-															role="menuitem"
-															className="omp-entry-item"
-															onClick={() => {
-																setEntryMenuOpen(false);
-																openResourceSuggest();
-															}}
-														>
-															<Icon name="file" size={14} />
-															<span>引用资源</span>
-															<span className="omp-entry-item-hint">文件 / 网址</span>
-														</button>
-														<button
-															type="button"
-															role="menuitem"
-															className={`omp-entry-item ${entrySubmenu === "mode" ? "active" : ""}`}
-															onClick={() =>
-																setEntrySubmenu((value) => (value === "mode" ? null : "mode"))
-															}
-														>
-															<Icon name="rotate" size={14} />
-															<span>模式</span>
-															<span className="omp-entry-item-hint">{currentModeName}</span>
-															<Icon name="chevron-right" size={12} />
-														</button>
-														<button
-															type="button"
-															role="menuitem"
-															className={`omp-entry-item ${entrySubmenu === "skills" ? "active" : ""}`}
-															onClick={() =>
-																setEntrySubmenu((value) => (value === "skills" ? null : "skills"))
-															}
-														>
-															<Icon name="spark" size={14} />
-															<span>技能</span>
-															<span className="omp-entry-item-hint">{installedSkills.length}</span>
-															<Icon name="chevron-right" size={12} />
-														</button>
-														<button
-															type="button"
-															role="menuitem"
-															className={`omp-entry-item ${entrySubmenu === "connectors" ? "active" : ""}`}
-															onClick={() =>
-																setEntrySubmenu((value) =>
-																	value === "connectors" ? null : "connectors",
-																)
-															}
-														>
-															<Icon name="layers" size={14} />
-															<span>连接器</span>
-															<span className="omp-entry-item-hint">
-																{mcpConfig?.servers.length ?? 0}
-															</span>
-															<Icon name="chevron-right" size={12} />
-														</button>
-														{entrySubmenu && (
-															<div className="omp-entry-submenu">
-																{entrySubmenu === "mode" && (
-																	<>
-																		<div className="omp-entry-subhead">运行模式</div>
-																		{(activeState?.modes?.availableModes || []).map((mode) => (
-																			<button
-																				key={mode.id}
-																				type="button"
-																				className={`omp-entry-subitem ${
-																					mode.id === activeState?.modes?.currentModeId
-																						? "active"
-																						: ""
-																				}`}
-																				onClick={() => {
-																					void changeMode(mode.id);
-																					setEntryMenuOpen(false);
-																					setEntrySubmenu(null);
-																				}}
-																			>
-																				<span>{pickLabel(MODE_LABEL, mode.id, mode.name)}</span>
-																				{mode.id === activeState?.modes?.currentModeId && (
-																					<Icon name="check" size={13} />
-																				)}
-																			</button>
-																		))}
-																		{!activeState?.modes?.availableModes.length && (
-																			<div className="omp-entry-empty">当前会话未提供模式切换</div>
-																		)}
-																	</>
-																)}
-																{entrySubmenu === "skills" && (
-																	<>
-																		<div className="omp-entry-subhead">已安装技能</div>
-																		{installedSkills.slice(0, 12).map((skill) => (
-																			<button
-																				key={skill.name}
-																				type="button"
-																				className="omp-entry-subitem"
-																				onClick={() => {
-																					applySkill(skill.name);
-																					setEntryMenuOpen(false);
-																					setEntrySubmenu(null);
-																				}}
-																			>
-																				<span>{skill.name}</span>
-																			</button>
-																		))}
-																		{!installedSkills.length && (
-																			<div className="omp-entry-empty">暂无已安装技能</div>
-																		)}
-																		<button
-																			type="button"
-																			className="omp-entry-subitem manage"
-																			onClick={() => {
-																				setEntryMenuOpen(false);
-																				setEntrySubmenu(null);
-																				setShowSkills(true);
-																			}}
-																		>
-																			<Icon name="settings" size={12} />
-																			<span>管理技能…</span>
-																		</button>
-																	</>
-																)}
-																{entrySubmenu === "connectors" && (
-																	<>
-																		<div className="omp-entry-subhead">MCP 连接器</div>
-																		{(mcpConfig?.servers || []).map((server) => (
-																			<div
-																				key={`${server.scope}:${server.name}`}
-																				className="omp-entry-subitem static"
-																				title={server.source}
-																			>
-																				<span>{server.name}</span>
-																				<span className="omp-entry-server-meta">
-																					{server.scope === "user" ? "全局" : "项目"} ·{" "}
-																					{server.transport}
-																					{server.enabled ? "" : " · 已禁用"}
-																				</span>
-																			</div>
-																		))}
-																		{!mcpConfig?.servers.length && (
-																			<div className="omp-entry-empty">
-																				未配置连接器；omp 从 .omp/mcp.json 读取
-																			</div>
-																		)}
-																	</>
-																)}
-															</div>
-														)}
-													</div>
-												)}
-											</span>
+											<EntryMenu
+												open={entryMenuOpen}
+												submenu={entrySubmenu}
+												onToggleOpen={() => {
+													setEntrySubmenu(null);
+													setEntryMenuOpen((value) => !value);
+												}}
+												onChangeSubmenu={setEntrySubmenu}
+												onClose={() => {
+													setEntryMenuOpen(false);
+													setEntrySubmenu(null);
+												}}
+												menuRef={entryMenuRef}
+												currentModeName={currentModeName}
+												modes={activeState?.modes ?? null}
+												onSelectMode={(modeId) => void changeMode(modeId)}
+												skills={installedSkills}
+												onSelectSkill={applySkill}
+												onManageSkills={() => setShowSkills(true)}
+												mcpConfig={mcpConfig}
+												onInsertFile={() => void insertFileReference()}
+												onOpenResourceSuggest={openResourceSuggest}
+											/>
 											<span className="omp-path-label" title={settings.cwd}>
 												{shortPath(settings.cwd)}
 											</span>
 										</div>
 										<div className="omp-composer-tools">
-											<span className="omp-approval-wrap" ref={approvalRef}>
-												<button
-													type="button"
-													className={`omp-approval-trigger ${approvalOpen ? "active" : ""}`}
-													onClick={() => setApprovalOpen((value) => !value)}
-													title={`安全等级：${APPROVAL_LABEL[settings.approvalMode]}`}
-													aria-label="安全等级"
-													aria-haspopup="menu"
-													aria-expanded={approvalOpen}
-												>
-													<Icon name="shield" size={13} />
-													<span className="omp-btn-label">
-														{APPROVAL_LABEL[settings.approvalMode]}
-													</span>
-													<Icon name="chevron" size={12} />
-												</button>
-												{approvalOpen && (
-													<div className="omp-approval-menu" role="menu" aria-label="安全等级">
-														{APPROVAL_OPTIONS.map((mode) => (
-															<button
-																key={mode}
-																type="button"
-																role="menuitemradio"
-																aria-checked={settings.approvalMode === mode}
-																className={`omp-approval-item ${
-																	settings.approvalMode === mode ? "active" : ""
-																}`}
-																onClick={() => void changeApprovalMode(mode)}
-															>
-																<span className="omp-approval-item-main">
-																	<span>{APPROVAL_LABEL[mode]}</span>
-																	{settings.approvalMode === mode && (
-																		<Icon name="check" size={13} />
-																	)}
-																</span>
-																<span className="omp-approval-item-hint">
-																	{APPROVAL_HINT[mode]}
-																</span>
-															</button>
-														))}
-													</div>
-												)}
-											</span>
+											<ApprovalMenu
+												open={approvalOpen}
+												mode={settings.approvalMode}
+												wrapRef={approvalRef}
+												onToggle={() => setApprovalOpen((value) => !value)}
+												onSelect={(mode) => void changeApprovalMode(mode)}
+											/>
 											<button
 												type="button"
 												className={`omp-model-trigger ${modelMenuOpen ? "active" : ""}`}
@@ -2088,55 +1833,19 @@ export function App() {
 												<span className="omp-model-label">{currentModelName || "模型"}</span>
 												<Icon name="chevron" size={12} />
 											</button>
-											<span className="omp-context-wrap" ref={contextRef}>
-												<button
-													type="button"
-													className={`omp-context-trigger ${contextOpen ? "active" : ""} ${
-														contextPercent >= 85 ? "danger" : contextPercent >= 60 ? "warn" : ""
-													}`}
-													onClick={() => {
-														const next = !contextOpen;
-														setContextOpen(next);
-														if (next && activeId) void probeContext(activeId);
-													}}
-													title={
-														report ? `上下文已用 ${report.percent.toFixed(1)}%` : "查看上下文用量"
-													}
-													aria-label="上下文用量"
-												>
-													<ContextRing percent={contextPercent} />
-												</button>
-												{contextOpen && (
-													<div className="omp-context-panel" role="dialog" aria-label="上下文用量">
-														<div className="omp-context-head">
-															<span>上下文用量</span>
-															<button
-																type="button"
-																className="omp-context-close"
-																onClick={() => setContextOpen(false)}
-																aria-label="关闭"
-															>
-																<Icon name="close" size={13} />
-															</button>
-														</div>
-														<div className="omp-context-total">
-															<strong>{report ? `${report.percent.toFixed(1)}%` : "—"}</strong>
-															<span>
-																{report
-																	? `已使用 ${formatTokens(report.usedTokens)} / ${formatContext(report.contextWindow)}`
-																	: "正在读取 omp 上下文统计…"}
-															</span>
-														</div>
-														{report && <ContextMeter report={report} />}
-														<div className="omp-context-foot">
-															{report
-																? `${formatContext(report.contextWindow)} 上下文`
-																: "上下文窗口未知"}
-															{shortModelName ? ` · ${shortModelName}` : ""}
-														</div>
-													</div>
-												)}
-											</span>
+											<ContextPanel
+												open={contextOpen}
+												percent={contextPercent}
+												report={report}
+												shortModelName={shortModelName}
+												wrapRef={contextRef}
+												onToggle={() => {
+													const next = !contextOpen;
+													setContextOpen(next);
+													if (next && activeId) void probeContext(activeId);
+												}}
+												onClose={() => setContextOpen(false)}
+											/>
 											{running ? (
 												<button
 													type="button"
@@ -2161,127 +1870,21 @@ export function App() {
 											)}
 										</div>
 									</div>
-									{modelMenuOpen && (
-										<div className="omp-model-panel" role="dialog" aria-label="模型设置">
-											<div className="omp-model-list">
-												<div className="omp-model-list-body">
-													{(modelOption?.options || []).map((item) => {
-														const active = item.value === modelOption?.currentValue;
-														const context = modelContexts[item.value];
-														return (
-															<button
-																key={item.value}
-																type="button"
-																className={`omp-model-option ${active ? "active" : ""}`}
-																title={item.name}
-																onClick={() => {
-																	if (modelOption)
-																		void changeConfigOption(modelOption.id, item.value);
-																}}
-															>
-																<span className="omp-model-option-name">{item.name}</span>
-																{context !== undefined && (
-																	<span className="omp-model-option-ctx">
-																		{formatContext(context)}
-																	</span>
-																)}
-																{active && <Icon name="check" size={14} />}
-															</button>
-														);
-													})}
-													{!modelOption?.options?.length && (
-														<div className="omp-model-empty">当前 omp 未提供可切换的模型</div>
-													)}
-												</div>
-												<button
-													type="button"
-													className="omp-model-config"
-													onClick={() => {
-														setModelMenuOpen(false);
-														setShowSettings(true);
-													}}
-												>
-													<Icon name="settings" size={13} /> 配置自定义模型
-												</button>
-											</div>
-
-											<div className="omp-model-detail">
-												<div className="omp-model-detail-head">
-													<strong title={currentModelName}>{currentModelName || "模型"}</strong>
-													{modelOption?.currentValue && <span>{modelOption.currentValue}</span>}
-												</div>
-												<div className="omp-model-detail-rows">
-													{activeRow ? (
-														<div className="omp-model-drill">
-															<button
-																type="button"
-																className="omp-model-drill-head"
-																onClick={() => setOpenModelRow(null)}
-															>
-																<Icon name="chevron-right" size={12} />
-																<span>{activeRow.label}</span>
-															</button>
-															<div className="omp-model-drill-body">
-																{activeRow.options?.map((option) => (
-																	<button
-																		key={option.value}
-																		type="button"
-																		className={`omp-model-sub ${option.value === activeRow.currentValue ? "active" : ""}`}
-																		onClick={() => {
-																			activeRow.onSelect?.(option.value);
-																			setOpenModelRow(null);
-																		}}
-																	>
-																		<span>{option.label}</span>
-																		{option.value === activeRow.currentValue && (
-																			<Icon name="check" size={13} />
-																		)}
-																	</button>
-																))}
-															</div>
-														</div>
-													) : (
-														<>
-															{modelRows.map((row) => (
-																<div className="omp-model-row" key={row.id}>
-																	<button
-																		type="button"
-																		className="omp-model-row-btn"
-																		onClick={() => {
-																			if (row.options?.length) {
-																				setOpenModelRow(row.id);
-																				return;
-																			}
-																			row.onSelect?.("");
-																		}}
-																	>
-																		<span className="omp-model-row-label">{row.label}</span>
-																		<span className="omp-model-row-value">
-																			{row.valueLabel}
-																			{row.options?.length ? (
-																				<Icon name="chevron-right" size={12} />
-																			) : null}
-																		</span>
-																	</button>
-																</div>
-															))}
-															{currentContext !== undefined && (
-																<div className="omp-model-row static">
-																	<span className="omp-model-row-label">上下文窗口</span>
-																	<span className="omp-model-row-value">
-																		{formatContext(currentContext)}
-																	</span>
-																</div>
-															)}
-															{modelRows.length === 0 && currentContext === undefined && (
-																<div className="omp-model-empty">当前模型没有可调配置。</div>
-															)}
-														</>
-													)}
-												</div>
-											</div>
-										</div>
-									)}
+									<ModelPanel
+										open={modelMenuOpen}
+										modelName={currentModelName}
+										modelOption={modelOption ?? null}
+										contexts={modelContexts}
+										rows={modelRows}
+										currentContext={currentContext}
+										openRowId={openModelRow}
+										onOpenRow={setOpenModelRow}
+										onSelectModel={(optionId, value) => void changeConfigOption(optionId, value)}
+										onOpenSettings={() => {
+											setModelMenuOpen(false);
+											setShowSettings(true);
+										}}
+									/>
 								</div>
 								<div className="omp-disclaimer">内容由 AI 生成，请核对重要信息</div>
 							</div>
