@@ -2659,7 +2659,7 @@ export function App() {
 												<button
 													type="button"
 													className="omp-send"
-													onClick={send}
+													onClick={() => void send()}
 													disabled={!connected || !input.trim()}
 													title="发送"
 												>
