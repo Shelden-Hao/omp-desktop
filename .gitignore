@@ -47,3 +47,6 @@ Thumbs.db
 # Runtime data (omp-desktop user settings live in userData, not here)
 bun/
 *.pid
+
+# Local agent workspace memory (per-developer notes, not shared)
+.workbuddy/
