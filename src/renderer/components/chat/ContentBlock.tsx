@@ -1,12 +1,14 @@
 /**
  * 消息内容块：思考过程、工具调用卡片、代码/文本。
- * 思考与工具卡片默认展开（和终端保持一致），用户可自行折叠；工具卡片展示输入、输出与文件 diff。
+ * 折叠规则由上层传入的 `live` 决定：执行中展开（看得到 Agent 在做什么），这一轮结束后折叠。
+ * 工具卡片展示输入、输出与文件 diff。
  */
 
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef } from "react";
 import type { ContentBlock, ToolDiff } from "../../../shared/types";
 import { diffHunks, diffStats } from "../../core/diff";
 import { TOOL_KIND_LABEL } from "../../core/labels";
+import { useAutoOpen } from "../../hooks/use-auto-open";
 import { Icon, type IconName } from "../common/Icon";
 import { CodeBlock } from "./CodeBlock";
 import { Markdown } from "./Markdown";
@@ -32,17 +34,20 @@ export function Block({
 	block,
 	onOpenDoc,
 	query = "",
+	live = false,
 }: {
 	block: ContentBlock;
 	onOpenDoc: (name: string, content: string, path?: string) => void;
 	query?: string;
+	/** 该轮是否仍在执行：执行中过程默认展开，结束后默认折叠 */
+	live?: boolean;
 }) {
 	if (block.type === "thinking") {
-		return <ThinkingBlock block={block} onOpenDoc={onOpenDoc} query={query} />;
+		return <ThinkingBlock block={block} onOpenDoc={onOpenDoc} query={query} live={live} />;
 	}
 
 	if (block.type === "tool_call") {
-		return <ToolCard block={block} />;
+		return <ToolCard block={block} live={live} />;
 	}
 
 	if (block.type === "tool_result" || block.type === "diff" || block.type === "other") {
@@ -56,12 +61,14 @@ function ThinkingBlock({
 	block,
 	onOpenDoc,
 	query,
+	live,
 }: {
 	block: ContentBlock;
 	onOpenDoc: (name: string, content: string, path?: string) => void;
 	query: string;
+	live: boolean;
 }) {
-	const [open, setOpen] = useState(true);
+	const { open, onToggle } = useAutoOpen(live);
 	const bodyRef = useRef<HTMLDivElement>(null);
 
 	// 流式追加时跟到最新内容；折叠状态下不滚，用户手动往上翻也保持位置
@@ -71,11 +78,7 @@ function ThinkingBlock({
 	}, [block.text]);
 
 	return (
-		<details
-			className="omp-thinking"
-			open={open}
-			onToggle={(event) => setOpen(event.currentTarget.open)}
-		>
+		<details className="omp-thinking" open={open} onToggle={onToggle}>
 			<summary>
 				<Icon name="spark" size={14} />
 				<span>思考过程</span>
@@ -89,8 +92,9 @@ function ThinkingBlock({
 	);
 }
 
-function ToolCard({ block }: { block: ContentBlock }) {
-	const [open, setOpen] = useState(true);
+function ToolCard({ block, live }: { block: ContentBlock; live: boolean }) {
+	// 失败的工具调用结束后也保持展开：错误本身就是结论的一部分
+	const { open, onToggle } = useAutoOpen(live || block.status === "failed");
 	const status = TOOL_STATUS[block.status || "pending"];
 	const label = toolLabel(block);
 	const raw = block.raw as Record<string, unknown> | undefined;
@@ -107,7 +111,7 @@ function ToolCard({ block }: { block: ContentBlock }) {
 		<details
 			className={`omp-tool-card ${block.status || "pending"}`}
 			open={open}
-			onToggle={(event) => setOpen(event.currentTarget.open)}
+			onToggle={onToggle}
 		>
 			<summary className="omp-tool-summary">
 				<span className="omp-tool-icon">

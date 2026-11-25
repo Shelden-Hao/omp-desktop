@@ -8,6 +8,7 @@
 import type { RefObject } from "react";
 import type { ChatMessage } from "../../../shared/types";
 import { formatDuration } from "../../core/format";
+import { useAutoOpen } from "../../hooks/use-auto-open";
 import { Icon } from "../common/Icon";
 import { Block } from "./ContentBlock";
 import { MessageActions } from "./MessageActions";
@@ -117,10 +118,12 @@ interface MessageProps {
 }
 
 function Message({ message, isActive, query, onOpenDoc, onRetry }: MessageProps) {
-	const hasPendingTool = message.blocks.some(
-		(block) => block.type === "tool_call" && block.status === "pending",
-	);
-	const generating = message.role === "agent" && (isActive || hasPendingTool);
+	const generating = message.role === "agent" && isActive;
+	// 末尾连续的 text 块是「结论」，前面的思考/工具调用收进折叠区：执行中展开，结束后折叠
+	const splitAt = trailingTextStart(message.blocks);
+	const processBlocks = message.blocks.slice(0, splitAt);
+	const finalBlocks = message.blocks.slice(splitAt);
+	const hasProcess = message.role === "agent" && processBlocks.length > 0 && finalBlocks.length > 0;
 
 	return (
 		<article className={`omp-message ${message.role}`} data-message-id={message.id}>
@@ -148,21 +151,37 @@ function Message({ message, isActive, query, onOpenDoc, onRetry }: MessageProps)
 						</span>
 					)}
 				</div>
-				{message.role === "agent" && (
-					<div className={`omp-agent-status ${generating ? "busy" : ""}`}>
-						<Icon name={generating ? "spark" : "check"} size={11} />
-						<span>
-							{generating ? "生成中" : "已完成"}
-							{!generating && message.durationMs !== undefined
-								? ` ${formatDuration(message.durationMs)}`
-								: ""}
-						</span>
-					</div>
+				{hasProcess ? (
+					<ProcessFold
+						blocks={processBlocks}
+						generating={generating}
+						durationMs={message.durationMs}
+						query={query}
+						onOpenDoc={onOpenDoc}
+					/>
+				) : (
+					message.role === "agent" && (
+						<div className={`omp-agent-status ${generating ? "busy" : ""}`}>
+							<Icon name={generating ? "spark" : "check"} size={11} />
+							<span>
+								{generating ? "生成中" : "已完成"}
+								{!generating && message.durationMs !== undefined
+									? ` ${formatDuration(message.durationMs)}`
+									: ""}
+							</span>
+						</div>
+					)
 				)}
 				{message.blocks.length > 0 && (
 					<div className="omp-message-content">
-						{message.blocks.map((block, index) => (
-							<Block key={index} block={block} onOpenDoc={onOpenDoc} query={query} />
+						{(hasProcess ? finalBlocks : message.blocks).map((block, index) => (
+							<Block
+								key={index}
+								block={block}
+								onOpenDoc={onOpenDoc}
+								query={query}
+								live={generating}
+							/>
 						))}
 					</div>
 				)}
@@ -173,4 +192,50 @@ function Message({ message, isActive, query, onOpenDoc, onRetry }: MessageProps)
 			</div>
 		</article>
 	);
+}
+
+/**
+ * 一轮里的思考与工具调用：执行中展开让人看到进度，结束后自动折叠，只留最终回复。
+ * 用户手动展开/收起过之后以用户为准。
+ */
+function ProcessFold({
+	blocks,
+	generating,
+	durationMs,
+	query,
+	onOpenDoc,
+}: {
+	blocks: ChatMessage["blocks"];
+	generating: boolean;
+	durationMs?: number;
+	query: string;
+	onOpenDoc: (name: string, content: string, path?: string) => void;
+}) {
+	const { open, onToggle } = useAutoOpen(generating);
+
+	return (
+		<details className="omp-process-fold" open={open} onToggle={onToggle}>
+			<summary className="omp-agent-status">
+				<Icon name={generating ? "spark" : "check"} size={11} />
+				<span>
+					{generating ? "处理中" : "已完成"}
+					{!generating && durationMs !== undefined ? ` ${formatDuration(durationMs)}` : ""}
+				</span>
+				<span className="omp-process-hint">{generating ? "实时过程" : "查看处理过程"}</span>
+				<Icon name="chevron" size={12} className="omp-fold-chevron" />
+			</summary>
+			<div className="omp-process-body">
+				{blocks.map((block, index) => (
+					<Block key={index} block={block} onOpenDoc={onOpenDoc} query={query} live={generating} />
+				))}
+			</div>
+		</details>
+	);
+}
+
+/** 从末尾往前跳过连续 text 块，返回结论区的起点下标 */
+function trailingTextStart(blocks: ChatMessage["blocks"]) {
+	let index = blocks.length;
+	while (index > 0 && blocks[index - 1].type === "text") index -= 1;
+	return index;
 }
