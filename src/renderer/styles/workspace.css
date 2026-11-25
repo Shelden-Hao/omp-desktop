@@ -335,13 +335,35 @@
   margin-bottom: var(--space-3);
 }
 .omp-group-head {
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  padding: 5px 10px 5px 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--text-muted);
   font-size: var(--font-sm);
   font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+.omp-group-head:hover {
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+}
+.omp-group-head > svg {
+  flex: none;
+}
+.omp-group-chevron {
+  transition: transform 150ms ease;
+}
+.omp-group-head.collapsed .omp-group-chevron {
+  transform: rotate(-90deg);
 }
 .omp-group-head span:nth-of-type(1) {
   flex: 1;

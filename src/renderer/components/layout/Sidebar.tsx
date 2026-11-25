@@ -3,6 +3,7 @@
  * 会话状态由上层推导后传入，这里只负责展示与选择。
  */
 
+import { useState } from "react";
 import { dirName, shortPath } from "../../core/format";
 import type { Session, SidebarView } from "../../core/session-filters";
 import { Icon } from "../common/Icon";
@@ -47,6 +48,11 @@ export function Sidebar({
 	onOpenSettings,
 	onViewChange,
 }: SidebarProps) {
+	// 按工作空间分组时，每个分组可以单独收起；默认全部展开
+	const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+	const toggleGroup = (group: string) =>
+		setCollapsedGroups((prev) => ({ ...prev, [group]: !prev[group] }));
+
 	return (
 		<aside className={`omp-sidebar ${collapsed ? "collapsed" : ""}`} aria-hidden={collapsed}>
 			<div className="omp-sidebar-nav">
@@ -122,33 +128,44 @@ export function Sidebar({
 						)}
 						{Object.entries(
 							sessions.reduce<Record<string, Session[]>>((groups, session) => {
-								const key = dirName(session.cwd || cwd);
+								const key = session.cwd || cwd;
 								(groups[key] ||= []).push(session);
 								return groups;
 							}, {}),
-						).map(([group, items]) => (
-							<div key={group} className="omp-session-group">
-								<div className="omp-group-head">
-									<Icon name="folder" size={14} />
-									<span>{group}</span>
-									<span className="omp-count">{items.length}</span>
+						).map(([group, items]) => {
+							const isCollapsed = Boolean(collapsedGroups[group]);
+							return (
+								<div key={group} className="omp-session-group">
+									<button
+										type="button"
+										className={`omp-group-head ${isCollapsed ? "collapsed" : ""}`}
+										onClick={() => toggleGroup(group)}
+										aria-expanded={!isCollapsed}
+										title={group}
+									>
+										<Icon name="chevron" size={12} className="omp-group-chevron" />
+										<Icon name="folder" size={14} />
+										<span>{dirName(group)}</span>
+										<span className="omp-count">{items.length}</span>
+									</button>
+									{!isCollapsed &&
+										items.map((session) => (
+											<SessionRow
+												key={session.id}
+												session={session}
+												active={session.id === activeId}
+												running={running}
+												grouped
+												onSelect={onSelect}
+												onTogglePin={onTogglePin}
+												onRename={onRename}
+												onOpenFolder={onOpenFolder}
+												onDelete={onDelete}
+											/>
+										))}
 								</div>
-								{items.map((session) => (
-									<SessionRow
-										key={session.id}
-										session={session}
-										active={session.id === activeId}
-										running={running}
-										grouped
-										onSelect={onSelect}
-										onTogglePin={onTogglePin}
-										onRename={onRename}
-										onOpenFolder={onOpenFolder}
-										onDelete={onDelete}
-									/>
-								))}
-							</div>
-						))}
+							);
+						})}
 					</div>
 				)}
 			</div>
