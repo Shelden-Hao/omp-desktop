@@ -10,7 +10,6 @@ import type {
 	AuditEntry,
 	ChatMessage,
 	ContentBlock,
-	ContextPart,
 	ContextReport,
 	DesktopSettings,
 	McpConfigInfo,
@@ -32,23 +31,29 @@ import {
 	removeChip,
 } from "./core/composer/editor";
 import { parseContextReport } from "./core/context-report";
-import { DEFAULT_DOCS, type DocFile } from "./docs";
+import { Icon } from "./components/common/Icon";
 import {
-	dirName,
-	formatContext,
-	formatDuration,
-	formatTokens,
-	pickLabel,
-	relativeTime,
-	shortPath,
-} from "./core/format";
+	type Session,
+	type SidebarView,
+	type StatusFilter,
+	type TimeFilter,
+} from "./core/session-filters";
+import { Block } from "./components/chat/ContentBlock";
+import { ContextMeter, ContextRing } from "./components/chat/ContextMeter";
+import { MessageActions } from "./components/chat/MessageActions";
+import { PreviewPane } from "./components/layout/PreviewPane";
+import { Sidebar } from "./components/layout/Sidebar";
+import { TitleBar } from "./components/layout/TitleBar";
+import { PermissionDialog } from "./components/modals/PermissionDialog";
+import { SensitiveDialog } from "./components/modals/SensitiveDialog";
+import { DEFAULT_DOCS, type DocFile } from "./core/docs";
+import { formatContext, formatDuration, formatTokens, pickLabel, shortPath } from "./core/format";
 import {
 	APPROVAL_HINT,
 	APPROVAL_LABEL,
 	APPROVAL_OPTIONS,
 	MODE_LABEL,
 	THINKING_LABEL,
-	TOOL_KIND_LABEL,
 } from "./core/labels";
 import {
 	extractPathsFromMessages,
@@ -61,74 +66,12 @@ import { extractText, formatToolInput } from "./core/tool-input";
 import { SettingsPanel } from "./SettingsPanel";
 import { SkillsPanel } from "./SkillsPanel";
 
-interface Session {
-	id: string;
-	title: string;
-	cwd?: string;
-	ts?: number;
-}
-
-type SidebarView = "recent" | "grouped";
-
-/** 任务状态筛选。状态由本地会话数据推导，omp 本身不返回任务状态。 */
-type StatusFilter = "all" | "running" | "done" | "failed" | "pending" | "planned";
-type TimeFilter = "all" | "today" | "week" | "month";
-
-const STATUS_FILTERS: Array<{ value: StatusFilter; label: string }> = [
-	{ value: "all", label: "全部状态" },
-	{ value: "running", label: "进行中" },
-	{ value: "done", label: "已完成" },
-	{ value: "failed", label: "失败" },
-	{ value: "pending", label: "待处理" },
-	{ value: "planned", label: "规划中" },
-];
-
-const TIME_FILTERS: Array<{ value: TimeFilter; label: string }> = [
-	{ value: "all", label: "全部时间" },
-	{ value: "today", label: "今天" },
-	{ value: "week", label: "最近 7 天" },
-	{ value: "month", label: "最近 30 天" },
-];
-
 interface PermissionState {
 	sessionId: string;
 	title: string;
 	options: Array<{ optionId: string; name: string; kind: string }>;
 	respond: (result: unknown) => void;
 }
-
-type IconName =
-	| "plus"
-	| "settings"
-	| "sun"
-	| "moon"
-	| "monitor"
-	| "folder"
-	| "file"
-	| "link"
-	| "close"
-	| "send"
-	| "stop"
-	| "chevron"
-	| "panel"
-	| "refresh"
-	| "copy"
-	| "check"
-	| "spark"
-	| "warning"
-	| "search"
-	| "chat"
-	| "grid"
-	| "clock"
-	| "layers"
-	| "chevron-right"
-	| "more"
-	| "rotate"
-	| "minimize"
-	| "maximize"
-	| "sidebar"
-	| "filter"
-	| "shield";
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -144,719 +87,6 @@ interface ModelRow {
 	currentValue?: string;
 	options?: ModelRowOption[];
 	onSelect?: (value: string) => void;
-}
-
-function Icon({
-	name,
-	size = 16,
-	className,
-}: {
-	name: IconName;
-	size?: number;
-	className?: string;
-}) {
-	const common = {
-		className,
-		width: size,
-		height: size,
-		viewBox: "0 0 24 24",
-		fill: "none",
-		stroke: "currentColor",
-		strokeWidth: 1.8,
-		strokeLinecap: "round" as const,
-		strokeLinejoin: "round" as const,
-		"aria-hidden": true,
-	};
-	switch (name) {
-		case "plus":
-			return (
-				<svg {...common}>
-					<path d="M12 5v14M5 12h14" />
-				</svg>
-			);
-		case "settings":
-			return (
-				<svg {...common}>
-					<circle cx="12" cy="12" r="3" />
-					<path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2H8.9v-.2a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1-2.8-2.8.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H1.8v-3.9h.2a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1 2.8-2.8.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 1-1.6V2h3.9v.2a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1 2.8 2.8-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.6 1h.2v3.9h-.2a1.7 1.7 0 0 0-1.5 1Z" />
-				</svg>
-			);
-		case "sun":
-			return (
-				<svg {...common}>
-					<circle cx="12" cy="12" r="4" />
-					<path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
-				</svg>
-			);
-		case "moon":
-			return (
-				<svg {...common}>
-					<path d="M20.5 14.2A8.5 8.5 0 1 1 9.8 3.5a6.7 6.7 0 0 0 10.7 10.7Z" />
-				</svg>
-			);
-		case "monitor":
-			return (
-				<svg {...common}>
-					<rect x="3" y="4" width="18" height="13" rx="2" />
-					<path d="M8 21h8M12 17v4" />
-				</svg>
-			);
-		case "folder":
-			return (
-				<svg {...common}>
-					<path d="M3 7.5h6.2l2 2H21v9.5H3z" />
-				</svg>
-			);
-		case "file":
-			return (
-				<svg {...common}>
-					<path d="M6 3h8l4 4v14H6zM14 3v5h4" />
-				</svg>
-			);
-		case "link":
-			return (
-				<svg {...common}>
-					<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" />
-					<path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />
-				</svg>
-			);
-		case "close":
-			return (
-				<svg {...common}>
-					<path d="M6 6l12 12M18 6 6 18" />
-				</svg>
-			);
-		case "minimize":
-			return (
-				<svg {...common}>
-					<path d="M5 12h14" />
-				</svg>
-			);
-		case "maximize":
-			return (
-				<svg {...common}>
-					<rect x="5" y="5" width="14" height="14" rx="1" />
-				</svg>
-			);
-		case "send":
-			return (
-				<svg {...common}>
-					<path d="M4 12 20 4l-6.5 16-2.7-6.8L4 12Z" />
-				</svg>
-			);
-		case "stop":
-			return (
-				<svg {...common}>
-					<rect x="6" y="6" width="12" height="12" rx="2" />
-				</svg>
-			);
-		case "chevron":
-			return (
-				<svg {...common}>
-					<path d="m6 9 6 6 6-6" />
-				</svg>
-			);
-		case "panel":
-			return (
-				<svg {...common}>
-					<rect x="3" y="4" width="18" height="16" rx="2" />
-					<path d="M15 4v16" />
-				</svg>
-			);
-		case "sidebar":
-			return (
-				<svg {...common}>
-					<rect x="3" y="4" width="18" height="16" rx="4.5" />
-					<path d="M9.5 5.2v13.6" />
-					<path d="M4.6 5.2h4.4v13.6H4.6z" fill="currentColor" stroke="none" opacity="0.5" />
-				</svg>
-			);
-		case "filter":
-			return (
-				<svg {...common}>
-					<path d="M4 5h16l-6 7.6V19l-4-2.4v-4L4 5Z" />
-				</svg>
-			);
-		case "shield":
-			return (
-				<svg {...common}>
-					<path d="M12 3.2 5 6v5.4c0 4.3 2.9 7.4 7 9.4 4.1-2 7-5.1 7-9.4V6l-7-2.8Z" />
-				</svg>
-			);
-		case "refresh":
-			return (
-				<svg {...common}>
-					<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5" />
-				</svg>
-			);
-		case "copy":
-			return (
-				<svg {...common}>
-					<rect x="8" y="8" width="12" height="12" rx="2" />
-					<path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
-				</svg>
-			);
-		case "check":
-			return (
-				<svg {...common}>
-					<path d="m5 12 4.5 4.5L19 7" />
-				</svg>
-			);
-		case "spark":
-			return (
-				<svg {...common}>
-					<path d="m12 3 2.1 6.9L21 12l-6.9 2.1L12 21l-2.1-6.9L3 12l6.9-2.1L12 3Z" />
-				</svg>
-			);
-		case "warning":
-			return (
-				<svg {...common}>
-					<path d="M12 3 2.5 20h19L12 3ZM12 9v5M12 17.5v.5" />
-				</svg>
-			);
-		case "search":
-			return (
-				<svg {...common}>
-					<circle cx="11" cy="11" r="7" />
-					<path d="m20 20-4-4" />
-				</svg>
-			);
-		case "chat":
-			return (
-				<svg {...common}>
-					<path d="M20 15a2 2 0 0 1-2 2H8l-4 3V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2Z" />
-				</svg>
-			);
-		case "grid":
-			return (
-				<svg {...common}>
-					<rect x="3" y="3" width="7" height="7" rx="1.5" />
-					<rect x="14" y="3" width="7" height="7" rx="1.5" />
-					<rect x="3" y="14" width="7" height="7" rx="1.5" />
-					<rect x="14" y="14" width="7" height="7" rx="1.5" />
-				</svg>
-			);
-		case "clock":
-			return (
-				<svg {...common}>
-					<circle cx="12" cy="12" r="9" />
-					<path d="M12 7v5l3 2" />
-				</svg>
-			);
-		case "layers":
-			return (
-				<svg {...common}>
-					<path d="m12 3 9 5-9 5-9-5 9-5ZM3 13l9 5 9-5" />
-				</svg>
-			);
-		case "chevron-right":
-			return (
-				<svg {...common}>
-					<path d="m9 6 6 6-6 6" />
-				</svg>
-			);
-		case "more":
-			return (
-				<svg {...common}>
-					<circle cx="5" cy="12" r="1" />
-					<circle cx="12" cy="12" r="1" />
-					<circle cx="19" cy="12" r="1" />
-				</svg>
-			);
-		case "rotate":
-			return (
-				<svg {...common}>
-					<path d="M3 12a9 9 0 1 0 2.6-6.4L3 8M3 3v5h5" />
-				</svg>
-			);
-	}
-}
-
-type MdBlock =
-	| { type: "heading"; level: number; text: string }
-	| { type: "paragraph"; text: string }
-	| { type: "list"; items: string[] }
-	| { type: "code"; lang: string; text: string };
-
-function parseMarkdown(source: string): MdBlock[] {
-	const lines = source.replace(/\r\n/g, "\n").split("\n");
-	const blocks: MdBlock[] = [];
-	let i = 0;
-
-	while (i < lines.length) {
-		const line = lines[i];
-
-		if (/^\s*```/.test(line)) {
-			const lang = line.replace(/^\s*```/, "").trim();
-			i += 1;
-			const code: string[] = [];
-			while (i < lines.length && !/^\s*```/.test(lines[i])) {
-				code.push(lines[i]);
-				i += 1;
-			}
-			if (i < lines.length) i += 1;
-			blocks.push({ type: "code", lang, text: code.join("\n") });
-			continue;
-		}
-
-		const heading = /^(#{1,6})\s+(.+)$/.exec(line);
-		if (heading) {
-			blocks.push({ type: "heading", level: heading[1].length, text: heading[2] });
-			i += 1;
-			continue;
-		}
-
-		if (/^\s*[-*]\s+/.test(line)) {
-			const items: string[] = [];
-			while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) {
-				items.push(lines[i].replace(/^\s*[-*]\s+/, ""));
-				i += 1;
-			}
-			blocks.push({ type: "list", items });
-			continue;
-		}
-
-		if (!line.trim()) {
-			i += 1;
-			continue;
-		}
-
-		const paragraph: string[] = [];
-		while (
-			i < lines.length &&
-			lines[i].trim() &&
-			!/^\s*```/.test(lines[i]) &&
-			!/^#{1,6}\s+/.test(lines[i]) &&
-			!/^\s*[-*]\s+/.test(lines[i])
-		) {
-			paragraph.push(lines[i]);
-			i += 1;
-		}
-		blocks.push({ type: "paragraph", text: paragraph.join(" ") });
-	}
-
-	return blocks;
-}
-
-function InlineText({ text, query = "" }: { text: string; query?: string }) {
-	const parts = text
-		.split(/(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\(https?:\/\/[^\s)]+\)|https?:\/\/[^\s<]+)/g)
-		.filter(Boolean);
-	return (
-		<>
-			{parts.map((part, index) => {
-				if (part.startsWith("`") && part.endsWith("`")) {
-					return (
-						<code key={index}>
-							<Highlight text={part.slice(1, -1)} query={query} />
-						</code>
-					);
-				}
-				if (part.startsWith("**") && part.endsWith("**")) {
-					return (
-						<strong key={index}>
-							<Highlight text={part.slice(2, -2)} query={query} />
-						</strong>
-					);
-				}
-				const markdownLink = part.match(/^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/);
-				if (markdownLink) {
-					return (
-						<a key={index} href={markdownLink[2]} title={markdownLink[2]}>
-							<Highlight text={markdownLink[1]} query={query} />
-						</a>
-					);
-				}
-				if (/^https?:\/\//.test(part)) {
-					const url = part.replace(/[.,;:!?]+$/, "");
-					return (
-						<a key={index} href={url} title={url}>
-							<Highlight text={url} query={query} />
-						</a>
-					);
-				}
-				return (
-					<span key={index}>
-						<Highlight text={part} query={query} />
-					</span>
-				);
-			})}
-		</>
-	);
-}
-
-function CodeBlock({
-	code,
-	lang,
-	onOpen,
-}: {
-	code: string;
-	lang?: string;
-	onOpen?: (name: string, content: string) => void;
-}) {
-	const [copied, setCopied] = useState(false);
-
-	const copy = async () => {
-		try {
-			await navigator.clipboard.writeText(code);
-			setCopied(true);
-			window.setTimeout(() => setCopied(false), 1400);
-		} catch {
-			setCopied(false);
-		}
-	};
-
-	return (
-		<div className="omp-codeblock">
-			<div className="omp-codeblock-head">
-				<span>{lang || "text"}</span>
-				<div>
-					<button type="button" onClick={copy} title="复制代码">
-						<Icon name={copied ? "check" : "copy"} size={13} />
-						{copied ? "已复制" : "复制"}
-					</button>
-					{onOpen && (
-						<button type="button" onClick={() => onOpen("snippet.md", code)} title="在预览中打开">
-							<Icon name="file" size={13} />
-							预览
-						</button>
-					)}
-				</div>
-			</div>
-			<pre>
-				<code>{code}</code>
-			</pre>
-		</div>
-	);
-}
-
-function onMarkdownLinkClick(event: ReactMouseEvent<HTMLDivElement>) {
-	const anchor = (event.target as HTMLElement).closest("a");
-	if (!anchor) return;
-	event.preventDefault();
-	void window.desktop.links.open(anchor.getAttribute("href") || "").catch(() => undefined);
-}
-
-function Markdown({
-	text,
-	onOpen,
-	query = "",
-}: {
-	text: string;
-	onOpen: (name: string, content: string) => void;
-	query?: string;
-}) {
-	const blocks = useMemo(() => parseMarkdown(text), [text]);
-	return (
-		<div className="omp-markdown" onClick={onMarkdownLinkClick}>
-			{blocks.map((block, index) => {
-				if (block.type === "heading") {
-					const Tag = `h${Math.min(block.level + 1, 6)}` as "h2" | "h3" | "h4" | "h5" | "h6";
-					return (
-						<Tag key={index}>
-							<InlineText text={block.text} query={query} />
-						</Tag>
-					);
-				}
-				if (block.type === "list") {
-					return (
-						<ul key={index}>
-							{block.items.map((item, itemIndex) => (
-								<li key={itemIndex}>
-									<InlineText text={item} query={query} />
-								</li>
-							))}
-						</ul>
-					);
-				}
-				if (block.type === "code") {
-					return <CodeBlock key={index} code={block.text} lang={block.lang} onOpen={onOpen} />;
-				}
-				return (
-					<p key={index}>
-						<InlineText text={block.text} query={query} />
-					</p>
-				);
-			})}
-		</div>
-	);
-}
-
-function Highlight({ text, query }: { text: string; query: string }) {
-	if (!query.trim()) return <>{text}</>;
-	const lower = text.toLowerCase();
-	const target = query.toLowerCase();
-	const parts: Array<{ text: string; hit: boolean }> = [];
-	let cursor = 0;
-	let found = lower.indexOf(target);
-	while (found >= 0) {
-		if (found > cursor) parts.push({ text: text.slice(cursor, found), hit: false });
-		parts.push({ text: text.slice(found, found + query.length), hit: true });
-		cursor = found + query.length;
-		found = lower.indexOf(target, cursor);
-	}
-	if (cursor < text.length) parts.push({ text: text.slice(cursor), hit: false });
-	return (
-		<>
-			{parts.map((part, index) =>
-				part.hit ? (
-					<mark key={index} data-search-hit>
-						{part.text}
-					</mark>
-				) : (
-					<span key={index}>{part.text}</span>
-				),
-			)}
-		</>
-	);
-}
-
-function MessageActions({ text, onRetry }: { text: string; onRetry?: () => void }) {
-	const [copied, setCopied] = useState(false);
-	const copy = async () => {
-		try {
-			await navigator.clipboard.writeText(text);
-			setCopied(true);
-			window.setTimeout(() => setCopied(false), 1400);
-		} catch {
-			setCopied(false);
-		}
-	};
-	return (
-		<div className="omp-message-actions">
-			<button type="button" onClick={() => void copy()} title="复制消息">
-				<Icon name={copied ? "check" : "copy"} size={13} />
-				{copied ? "已复制" : "复制"}
-			</button>
-			{onRetry && (
-				<button type="button" onClick={onRetry} title="重新发送">
-					<Icon name="rotate" size={13} />
-					重试
-				</button>
-			)}
-		</div>
-	);
-}
-
-const TOOL_STATUS: Record<string, { label: string; icon: IconName }> = {
-	pending: { label: "执行中", icon: "spark" },
-	completed: { label: "已完成", icon: "check" },
-	failed: { label: "失败", icon: "warning" },
-};
-
-function toolLabel(block: ContentBlock): string {
-	if (block.kind && TOOL_KIND_LABEL[block.kind]) return TOOL_KIND_LABEL[block.kind];
-	const name = (block.toolName || "").toLowerCase();
-	if (/bash|shell|exec|command|terminal/.test(name)) return "运行命令";
-	if (/read|cat|file/.test(name)) return "读取文件";
-	if (/write|edit|patch|apply/.test(name)) return "编辑文件";
-	if (/grep|glob|search|find/.test(name)) return "搜索";
-	if (/fetch|web|http/.test(name)) return "获取内容";
-	return block.toolName || "工具调用";
-}
-
-function Block({
-	block,
-	onOpenDoc,
-	query = "",
-}: {
-	block: ContentBlock;
-	onOpenDoc: (name: string, content: string) => void;
-	query?: string;
-}) {
-	if (block.type === "thinking") {
-		return (
-			<details className="omp-thinking">
-				<summary>
-					<Icon name="spark" size={14} />
-					<span>深度思考</span>
-					<svg
-						className="omp-fold-chevron"
-						viewBox="0 0 16 16"
-						width="13"
-						height="13"
-						aria-hidden="true"
-					>
-						<path
-							d="M4 6l4 4 4-4"
-							fill="none"
-							stroke="currentColor"
-							strokeWidth="1.5"
-							strokeLinecap="round"
-							strokeLinejoin="round"
-						/>
-					</svg>
-				</summary>
-				<div className="omp-thinking-body">
-					<Markdown text={block.text} onOpen={onOpenDoc} query={query} />
-				</div>
-			</details>
-		);
-	}
-
-	if (block.type === "tool_call") {
-		const status = TOOL_STATUS[block.status || "pending"];
-		const label = toolLabel(block);
-		const raw = block.raw as Record<string, unknown> | undefined;
-		const legacyTitle = typeof raw?.title === "string" ? raw.title : "";
-		const title = block.title || legacyTitle;
-		const legacyResult =
-			!block.result && block.text && block.text !== raw?.toolCallId ? block.text : "";
-		const result = block.result || legacyResult;
-		const input = block.rawInput || "";
-		const hasDetail = Boolean(title || input || result);
-		return (
-			<details className={`omp-tool-card ${block.status || "pending"}`}>
-				<summary className="omp-tool-summary">
-					<span className="omp-tool-icon">
-						<Icon name={status.icon} size={14} />
-					</span>
-					<span className="omp-tool-label">{label}</span>
-					{title && <span className="omp-tool-title-inline">{title}</span>}
-					<span className="omp-tool-status">{status.label}</span>
-					<svg
-						className="omp-fold-chevron"
-						viewBox="0 0 16 16"
-						width="13"
-						height="13"
-						aria-hidden="true"
-					>
-						<path
-							d="M4 6l4 4 4-4"
-							fill="none"
-							stroke="currentColor"
-							strokeWidth="1.5"
-							strokeLinecap="round"
-							strokeLinejoin="round"
-						/>
-					</svg>
-				</summary>
-				{hasDetail && (
-					<div className="omp-tool-body">
-						{input && (
-							<div className="omp-tool-section">
-								<div className="omp-tool-section-label">输入</div>
-								<pre className="omp-tool-pre">{input}</pre>
-							</div>
-						)}
-						{result && (
-							<div className="omp-tool-section">
-								<div className="omp-tool-section-label">结果</div>
-								<pre className="omp-tool-pre">{result}</pre>
-							</div>
-						)}
-					</div>
-				)}
-			</details>
-		);
-	}
-
-	if (block.type === "tool_result" || block.type === "diff" || block.type === "other") {
-		return <CodeBlock code={block.text} />;
-	}
-
-	return <Markdown text={block.text} onOpen={onOpenDoc} query={query} />;
-}
-
-/** 底部圆环：外层是上下文窗口，内层弧线是已用比例 */
-function ContextRing({ percent, size = 17 }: { percent: number; size?: number }) {
-	const clamped = Math.max(0, Math.min(100, percent));
-	const stroke = 2.4;
-	const center = size / 2;
-	const radius = center - stroke / 2;
-	const circumference = 2 * Math.PI * radius;
-	const filled = (clamped / 100) * circumference;
-	return (
-		<svg
-			width={size}
-			height={size}
-			viewBox={`0 0 ${size} ${size}`}
-			className="omp-context-ring"
-			aria-hidden="true"
-		>
-			<circle
-				className="omp-context-track"
-				cx={center}
-				cy={center}
-				r={radius}
-				fill="none"
-				strokeWidth={stroke}
-			/>
-			{clamped > 0 && (
-				<circle
-					className="omp-context-progress"
-					cx={center}
-					cy={center}
-					r={radius}
-					fill="none"
-					strokeWidth={stroke}
-					strokeLinecap="round"
-					strokeDasharray={`${filled} ${circumference - filled}`}
-					transform={`rotate(-90 ${center} ${center})`}
-				/>
-			)}
-		</svg>
-	);
-}
-
-/** 上下文分段条 + 图例，数值全部来自 omp `/context` */
-/** 分段条配色，按出现顺序取用；与图例圆点共用 */
-const CONTEXT_PART_COLORS = ["#6d5efc", "#12b981", "#f59e0b", "#8b5cf6", "#ec4899", "#0ea5e9"];
-
-function ContextMeter({ report }: { report: ContextReport }) {
-	const parts: Array<ContextPart & { color: string }> = report.parts.map((part, index) => ({
-		...part,
-		color: CONTEXT_PART_COLORS[index % CONTEXT_PART_COLORS.length],
-	}));
-	const reservedPercent = (report.reservedTokens / report.contextWindow) * 100;
-	const freePercent = Math.max(
-		0,
-		100 - parts.reduce((sum, part) => sum + part.percent, 0) - reservedPercent,
-	);
-	// 占比过小的分类在分段条上会挤成杂色碎条，只保留图例
-	const barParts = parts.filter((part) => part.percent >= 0.3);
-	const formatPercent = (value: number) =>
-		value > 0 && value < 0.1 ? "<0.1%" : `${value.toFixed(1)}%`;
-	return (
-		<>
-			<div className="omp-context-bar">
-				{barParts.map((part) => (
-					<span
-						key={part.key}
-						className="omp-context-seg"
-						style={{ width: `${part.percent}%`, background: part.color }}
-						title={`${part.label} ${formatTokens(part.tokens)}`}
-					/>
-				))}
-				{reservedPercent > 0 && (
-					<span
-						className="omp-context-seg reserved"
-						style={{ width: `${reservedPercent}%` }}
-						title={`自动压缩预留 ${formatTokens(report.reservedTokens)}`}
-					/>
-				)}
-				{freePercent > 0 && (
-					<span className="omp-context-seg free" style={{ width: `${freePercent}%` }} />
-				)}
-			</div>
-			<ul className="omp-context-legend">
-				{parts.map((part) => (
-					<li key={part.key}>
-						<span className="omp-context-dot" style={{ background: part.color }} />
-						<span className="omp-context-legend-label">{part.label}</span>
-						<span className="omp-context-legend-value">{formatPercent(part.percent)}</span>
-					</li>
-				))}
-				{report.reservedTokens > 0 && (
-					<li>
-						<span className="omp-context-dot reserved" />
-						<span className="omp-context-legend-label">自动压缩预留</span>
-						<span className="omp-context-legend-value">{formatPercent(reservedPercent)}</span>
-					</li>
-				)}
-			</ul>
-		</>
-	);
 }
 
 export function App() {
@@ -1537,8 +767,8 @@ export function App() {
 			if (silentContextRef.current === box) silentContextRef.current = null;
 			contextBusyRef.current = false;
 		}
-		const report = parseContextReport(box.text);
-		if (report) setContextReports((prev) => ({ ...prev, [sessionId]: report }));
+		const parsed = parseContextReport(box.text);
+		if (parsed) setContextReports((prev) => ({ ...prev, [sessionId]: parsed }));
 	}, []);
 
 	const loadSessionHistory = useCallback(async (acp: AcpClient, sessionId: string, cwd: string) => {
@@ -2227,292 +1457,50 @@ export function App() {
 
 	return (
 		<div className="omp-app">
-			<header className="omp-titlebar">
-				<div className="omp-titlebar-left">
-					<span className="omp-title-tip">
-						<button
-							type="button"
-							className={`omp-title-action ${sidebarCollapsed ? "active" : ""}`}
-							onClick={() => setSidebarCollapsed((value) => !value)}
-							aria-label="切换侧栏"
-						>
-							<Icon name="sidebar" size={14} />
-						</button>
-						<span className="omp-tooltip" role="tooltip">
-							{sidebarCollapsed ? "显示侧栏" : "收起侧栏"}
-						</span>
-					</span>
-					<span className="omp-title-tip omp-filter-wrap" ref={filterRef}>
-						<button
-							type="button"
-							className={`omp-title-action ${filterOpen ? "active" : ""} ${filtersActive ? "filtered" : ""}`}
-							onClick={() => setFilterOpen((value) => !value)}
-							aria-label="筛选任务状态"
-							aria-haspopup="menu"
-							aria-expanded={filterOpen}
-						>
-							<Icon name="filter" size={14} />
-							{filtersActive && <span className="omp-filter-dot" />}
-						</button>
-						<span className="omp-tooltip" role="tooltip">
-							筛选任务状态
-						</span>
-						{filterOpen && (
-							<div className="omp-filter-menu" role="menu">
-								<div className="omp-filter-group">
-									<span className="omp-filter-label">筛选状态</span>
-									{STATUS_FILTERS.map((item) => (
-										<button
-											key={item.value}
-											type="button"
-											role="menuitemradio"
-											aria-checked={statusFilter === item.value}
-											className={`omp-filter-item ${statusFilter === item.value ? "active" : ""}`}
-											onClick={() => {
-												setStatusFilter(item.value);
-												setFilterOpen(false);
-											}}
-										>
-											<span>{item.label}</span>
-											{statusFilter === item.value && <Icon name="check" size={14} />}
-										</button>
-									))}
-								</div>
-								<div className="omp-filter-group">
-									<span className="omp-filter-label">筛选时间</span>
-									{TIME_FILTERS.map((item) => (
-										<button
-											key={item.value}
-											type="button"
-											role="menuitemradio"
-											aria-checked={timeFilter === item.value}
-											className={`omp-filter-item ${timeFilter === item.value ? "active" : ""}`}
-											onClick={() => {
-												setTimeFilter(item.value);
-												setFilterOpen(false);
-											}}
-										>
-											<span>{item.label}</span>
-											{timeFilter === item.value && <Icon name="check" size={14} />}
-										</button>
-									))}
-								</div>
-								<button
-									type="button"
-									className="omp-filter-reset"
-									disabled={!filtersActive}
-									onClick={() => {
-										setStatusFilter("all");
-										setTimeFilter("all");
-									}}
-								>
-									重置筛选条件
-								</button>
-							</div>
-						)}
-					</span>
-					<span className="omp-title-divider" />
-					<strong className="omp-title-session" title={activeTitle}>
-						{activeTitle}
-					</strong>
-				</div>
-				<div className="omp-titlebar-right">
-					<span className={`omp-connection ${connected ? "online" : "offline"}`} title={status}>
-						<span className="omp-connection-dot" />
-						{connected ? "已连接" : "未连接"}
-					</span>
-					<span className="omp-title-divider" />
-					<span className="omp-title-tip">
-						<button
-							type="button"
-							className={`omp-title-action ${searchOpen ? "active" : ""}`}
-							onClick={() => {
-								setSearchOpen((value) => !value);
-								if (searchOpen) setSearchText("");
-							}}
-							aria-label="对话内搜索，快捷键 Ctrl+F"
-						>
-							<Icon name="search" size={14} />
-						</button>
-						<span className="omp-tooltip" role="tooltip">
-							对话内搜索 <kbd>Ctrl+F</kbd>
-						</span>
-					</span>
-					<button
-						type="button"
-						className={`omp-title-action ${showPreview ? "active" : ""}`}
-						onClick={() => setShowPreview((value) => !value)}
-						title={showPreview ? "隐藏文件预览" : "显示文件预览"}
-						aria-label="切换文件预览"
-					>
-						<Icon name="panel" size={14} />
-					</button>
-					<span className="omp-title-divider" />
-					<div className="omp-window-controls">
-						<button
-							type="button"
-							onClick={() => window.desktop.window.minimize()}
-							title="最小化"
-							aria-label="最小化"
-						>
-							<Icon name="minimize" size={12} />
-						</button>
-						<button
-							type="button"
-							onClick={() => window.desktop.window.maximize()}
-							title="最大化 / 还原"
-							aria-label="最大化或还原"
-						>
-							<Icon name="maximize" size={12} />
-						</button>
-						<button
-							type="button"
-							className="close"
-							onClick={() => window.desktop.window.close()}
-							title="关闭"
-							aria-label="关闭"
-						>
-							<Icon name="close" size={12} />
-						</button>
-					</div>
-				</div>
-			</header>
+			<TitleBar
+				sidebarCollapsed={sidebarCollapsed}
+				onToggleSidebar={() => setSidebarCollapsed((value) => !value)}
+				filterOpen={filterOpen}
+				onToggleFilter={() => setFilterOpen((value) => !value)}
+				onCloseFilter={() => setFilterOpen(false)}
+				filtersActive={filtersActive}
+				statusFilter={statusFilter}
+				timeFilter={timeFilter}
+				onStatusFilter={setStatusFilter}
+				onTimeFilter={setTimeFilter}
+				onResetFilters={() => {
+					setStatusFilter("all");
+					setTimeFilter("all");
+				}}
+				activeTitle={activeTitle}
+				connected={connected}
+				status={status}
+				searchOpen={searchOpen}
+				onToggleSearch={() => {
+					setSearchOpen((value) => !value);
+					if (searchOpen) setSearchText("");
+				}}
+				showPreview={showPreview}
+				onTogglePreview={() => setShowPreview((value) => !value)}
+				filterRef={filterRef}
+			/>
 
 			<div className="omp-workspace">
-				<aside
-					className={`omp-sidebar ${sidebarCollapsed ? "collapsed" : ""}`}
-					aria-hidden={sidebarCollapsed}
-				>
-					<div className="omp-sidebar-nav">
-						<button
-							type="button"
-							className="omp-nav-primary"
-							onClick={newSession}
-							disabled={!connected}
-						>
-							<Icon name="plus" size={16} />
-							<span>新建任务</span>
-						</button>
-						<div className="omp-nav-static">
-							<Icon name="chat" size={16} />
-							<span>助理</span>
-							<em>本地</em>
-						</div>
-						<button
-							type="button"
-							className="omp-nav-static"
-							onClick={() => setShowSkills(true)}
-							title="搜索、安装与管理 omp 技能"
-						>
-							<Icon name="layers" size={16} />
-							<span>技能</span>
-						</button>
-					</div>
-
-					<div className="omp-sidebar-section">
-						<div className="omp-view-tabs" role="tablist" aria-label="会话视图">
-							<button
-								type="button"
-								role="tab"
-								aria-selected={sidebarView === "recent"}
-								className={sidebarView === "recent" ? "active" : ""}
-								onClick={() => setSidebarView("recent")}
-							>
-								<Icon name="clock" size={13} /> 最近
-							</button>
-							<button
-								type="button"
-								role="tab"
-								aria-selected={sidebarView === "grouped"}
-								className={sidebarView === "grouped" ? "active" : ""}
-								onClick={() => setSidebarView("grouped")}
-							>
-								<Icon name="grid" size={13} /> 分组
-							</button>
-						</div>
-
-						{sidebarView === "recent" ? (
-							<div className="omp-session-list">
-								{filteredSessions.length === 0 && (
-									<div className="omp-list-empty">
-										{filtersActive ? "没有符合条件的会话" : "还没有会话"}
-									</div>
-								)}
-								{filteredSessions.map((session) => (
-									<button
-										key={session.id}
-										type="button"
-										className={`omp-session ${session.id === activeId ? "active" : ""}`}
-										onClick={() => void selectSession(session)}
-										title={session.title}
-									>
-										<Icon name="chat" size={14} />
-										<span className="omp-session-title">{session.title}</span>
-										{running && session.id === activeId ? (
-											<span className="omp-session-spinner" title="运行中" />
-										) : (
-											<time>{relativeTime(session.ts)}</time>
-										)}
-									</button>
-								))}
-							</div>
-						) : (
-							<div className="omp-session-list">
-								{filteredSessions.length === 0 && (
-									<div className="omp-list-empty">
-										{filtersActive ? "没有符合条件的会话" : "还没有会话"}
-									</div>
-								)}
-								{Object.entries(
-									filteredSessions.reduce<Record<string, Session[]>>((groups, session) => {
-										const key = dirName(session.cwd || settings.cwd);
-										(groups[key] ||= []).push(session);
-										return groups;
-									}, {}),
-								).map(([group, items]) => (
-									<div key={group} className="omp-session-group">
-										<div className="omp-group-head">
-											<Icon name="folder" size={14} />
-											<span>{group}</span>
-											<span className="omp-count">{items.length}</span>
-										</div>
-										{items.map((session) => (
-											<button
-												key={session.id}
-												type="button"
-												className={`omp-session grouped ${session.id === activeId ? "active" : ""}`}
-												onClick={() => void selectSession(session)}
-												title={session.title}
-											>
-												<span className="omp-session-title">{session.title}</span>
-												{running && session.id === activeId ? (
-													<span className="omp-session-spinner" title="运行中" />
-												) : (
-													<time>{relativeTime(session.ts)}</time>
-												)}
-											</button>
-										))}
-									</div>
-								))}
-							</div>
-						)}
-					</div>
-
-					<div className="omp-sidebar-footer">
-						<div className="omp-workdir" title={settings.cwd}>
-							<Icon name="folder" size={14} />
-							<span>{shortPath(settings.cwd)}</span>
-						</div>
-						<button
-							type="button"
-							className="omp-sidebar-setting"
-							onClick={() => setShowSettings(true)}
-						>
-							<Icon name="settings" size={14} />
-							设置
-						</button>
-					</div>
-				</aside>
+				<Sidebar
+					collapsed={sidebarCollapsed}
+					sessions={filteredSessions}
+					activeId={activeId}
+					running={running}
+					view={sidebarView}
+					filtersActive={filtersActive}
+					cwd={settings.cwd}
+					connected={connected}
+					onSelect={(session) => void selectSession(session)}
+					onNew={() => void newSession()}
+					onOpenSkills={() => setShowSkills(true)}
+					onOpenSettings={() => setShowSettings(true)}
+					onViewChange={setSidebarView}
+				/>
 
 				<main className="omp-main">
 					<div className="omp-content">
@@ -3300,162 +2288,45 @@ export function App() {
 						</section>
 
 						{showPreview && (
-							<aside className="omp-preview">
-								<div className="omp-preview-head">
-									<div>
-										<Icon name="file" size={14} />
-										<span>文件预览</span>
-										{currentDoc && (
-											<span
-												className="omp-preview-current"
-												title={currentDoc.path || currentDoc.name}
-											>
-												· {currentDoc.name}
-											</span>
-										)}
-									</div>
-									<div className="omp-preview-actions">
-										<button
-											type="button"
-											className="omp-icon-button"
-											onClick={openLocalFile}
-											title="打开文件"
-											aria-label="打开文件"
-										>
-											<Icon name="folder" size={14} />
-										</button>
-										{currentDoc?.path && (
-											<button
-												type="button"
-												className="omp-icon-button"
-												onClick={reloadDoc}
-												title="重新读取文件"
-												aria-label="重新读取文件"
-											>
-												<Icon name="refresh" size={14} />
-											</button>
-										)}
-										<button
-											type="button"
-											className="omp-icon-button"
-											onClick={() => setShowPreview(false)}
-											title="关闭预览"
-											aria-label="关闭预览"
-										>
-											<Icon name="close" size={14} />
-										</button>
-									</div>
-								</div>
-								<div className="omp-file-tabs">
-									{docs.map((doc) => (
-										<div
-											key={doc.key}
-											className={`omp-file-tab ${activeDoc === doc.key ? "active" : ""}`}
-										>
-											<button
-												type="button"
-												onClick={() => setActiveDoc(doc.key)}
-												title={doc.path || doc.name}
-											>
-												<Icon name="file" size={12} />
-												<span>{doc.name}</span>
-											</button>
-											<button
-												type="button"
-												className="omp-tab-close"
-												onClick={() => closeDoc(doc.key)}
-												title="关闭"
-												aria-label={`关闭 ${doc.name}`}
-											>
-												<Icon name="close" size={11} />
-											</button>
-										</div>
-									))}
-								</div>
-								<div className="omp-preview-body">
-									{currentDoc ? (
-										<CodeBlock code={currentDoc.content} lang={currentDoc.language} />
-									) : (
-										<div className="omp-preview-empty">
-											<Icon name="file" size={24} />
-											<p>暂无预览文件</p>
-											<span>打开文件，或在回复中打开代码块</span>
-											<button type="button" className="omp-preview-open" onClick={openLocalFile}>
-												<Icon name="folder" size={13} />
-												选择文件
-											</button>
-										</div>
-									)}
-								</div>
-							</aside>
+							<PreviewPane
+								docs={docs}
+								currentDoc={currentDoc}
+								activeDoc={activeDoc}
+								onSelectDoc={setActiveDoc}
+								onCloseDoc={closeDoc}
+								onReload={() => void reloadDoc()}
+								onOpenFile={() => void openLocalFile()}
+								onClose={() => setShowPreview(false)}
+							/>
 						)}
 					</div>
 				</main>
 			</div>
 
 			{sensitiveHit && (
-				<div className="omp-modal-layer" role="dialog" aria-modal="true" aria-label="敏感信息确认">
-					<div className="omp-modal">
-						<div className="omp-modal-icon warning">
-							<Icon name="shield" size={18} />
-						</div>
-						<h3>检测到疑似敏感信息</h3>
-						<p>
-							这条消息里包含「{sensitiveHit.label}
-							」。发送后会作为对话内容传给模型服务商，确认继续吗？
-						</p>
-						<div className="omp-modal-actions">
-							<button type="button" className="secondary" onClick={() => setSensitiveHit(null)}>
-								返回修改
-							</button>
-							<button
-								type="button"
-								className="primary"
-								onClick={() => {
-									const pending = sensitiveHit;
-									setSensitiveHit(null);
-									// 与正常发送保持一致：确认发送后清空输入区与 chip
-									if (editorRef.current) editorRef.current.innerHTML = "";
-									setInput("");
-									setSkillChips([]);
-									void send(pending.text, true);
-								}}
-							>
-								仍然发送
-							</button>
-						</div>
-					</div>
-				</div>
+				<SensitiveDialog
+					hit={sensitiveHit}
+					onCancel={() => setSensitiveHit(null)}
+					onConfirm={() => {
+						const pending = sensitiveHit;
+						setSensitiveHit(null);
+						// 与正常发送保持一致：确认发送后清空输入区与 chip
+						editor.clear();
+						setInput("");
+						setSkillChips([]);
+						void send(pending.text, true);
+					}}
+				/>
 			)}
 
 			{permission && (
-				<div className="omp-modal-layer" role="dialog" aria-modal="true" aria-label="权限确认">
-					<div className="omp-modal">
-						<div className="omp-modal-icon warning">
-							<Icon name="warning" size={18} />
-						</div>
-						<h3>需要你的确认</h3>
-						<p>omp 请求执行以下操作，请确认是否允许。</p>
-						<div className="omp-permission-title">{permission.title}</div>
-						<div className="omp-modal-actions">
-							{permission.options.map((option) => (
-								<button
-									key={option.optionId}
-									type="button"
-									className={/reject|deny|cancel/i.test(option.kind) ? "secondary" : "primary"}
-									onClick={() => {
-										permission.respond({
-											outcome: { outcome: "selected", optionId: option.optionId },
-										});
-										setPermission(null);
-									}}
-								>
-									{option.name}
-								</button>
-							))}
-						</div>
-					</div>
-				</div>
+				<PermissionDialog
+					request={permission}
+					onSelect={(optionId) => {
+						permission.respond({ outcome: { outcome: "selected", optionId } });
+						setPermission(null);
+					}}
+				/>
 			)}
 
 			{showSettings && (
