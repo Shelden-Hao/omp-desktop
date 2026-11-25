@@ -1,4 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type {
+	FormEvent as ReactFormEvent,
+	KeyboardEvent as ReactKeyboardEvent,
+	MouseEvent as ReactMouseEvent,
+} from "react";
 import {
 	AcpClient,
 	type AcpEvent,
@@ -182,6 +187,8 @@ const APPROVAL_OPTIONS: ApprovalMode[] = ["yolo", "write", "always-ask-cached", 
 
 /** 光标前正在输入的技能指令：/name 或 /skill:name（omp 实际识别的写法） */
 const SKILL_TOKEN_RE = /(?:^|\s)\/(?:skill:)?([\w-]*)$/;
+/** contenteditable 中 inline chip 的标记属性；DOM 即内容真相源 */
+const SKILL_CHIP_ATTR = "data-skill";
 
 /** omp `/context` 输出里的分段名称 → 中文 */
 const CONTEXT_PART_LABEL: Record<string, string> = {
@@ -1018,7 +1025,9 @@ export function App() {
 	const [installedSkills, setInstalledSkills] = useState<SkillSummary[]>([]);
 
 	const scrollRef = useRef<HTMLDivElement>(null);
-	const inputRef = useRef<HTMLTextAreaElement>(null);
+	/** 输入框是非受控 contenteditable：DOM 是内容真相源，React state 只做镜像用于按钮/联想 */
+	const editorRef = useRef<HTMLDivElement>(null);
+	const composingRef = useRef(false);
 	const searchInputRef = useRef<HTMLInputElement>(null);
 	const filterRef = useRef<HTMLSpanElement>(null);
 	const clientRef = useRef<AcpClient | null>(null);
@@ -1267,14 +1276,228 @@ export function App() {
 		return () => media.removeEventListener("change", apply);
 	}, [settings.theme]);
 
-	useEffect(() => {
-		const el = inputRef.current;
+	// ---------- 非受控 contenteditable 输入区 ----------
+	// chip 直接嵌在文本流里，文字会围绕它换行；React 只在 chip 增删/发送后同步 state，不回写 innerHTML
+	const readEditorText = (): string => {
+		const el = editorRef.current;
+		if (!el) return "";
+		let out = "";
+		const walk = (node: Node) => {
+			if (node.nodeType === Node.TEXT_NODE) {
+				out += node.textContent ?? "";
+				return;
+			}
+			if (node.nodeType !== Node.ELEMENT_NODE) return;
+			const elem = node as HTMLElement;
+			const skill = elem.getAttribute(SKILL_CHIP_ATTR);
+			if (skill) {
+				out += `/skill:${skill}`;
+				return;
+			}
+			if (elem.tagName === "BR") {
+				out += "\n";
+				return;
+			}
+			if ((elem.tagName === "DIV" || elem.tagName === "P") && out && !out.endsWith("\n")) {
+				out += "\n";
+			}
+			elem.childNodes.forEach(walk);
+		};
+		el.childNodes.forEach(walk);
+		return out;
+	};
+
+	const syncFromEditor = () => {
+		const el = editorRef.current;
 		if (!el) return;
-		el.style.height = "auto";
-		// 单行基准必须锁在 24px（与 chip 同高）：textarea 无 rows 时浏览器按 2 行算 scrollHeight=48，
-		// 会把盒子撑高一倍，flex 居中后文字看起来比 chip 低半行。
-		el.style.height = `${Math.min(Math.max(el.scrollHeight, 24), 160)}px`;
-	}, [input]);
+		const chips: string[] = [];
+		el.querySelectorAll(`[${SKILL_CHIP_ATTR}]`).forEach((node) => {
+			const name = node.getAttribute(SKILL_CHIP_ATTR);
+			if (name && !chips.includes(name)) chips.push(name);
+		});
+		setInput(readEditorText());
+		setSkillChips(chips);
+	};
+
+	const getEditorRange = (): Range | null => {
+		const el = editorRef.current;
+		const sel = window.getSelection();
+		if (!el || !sel || sel.rangeCount === 0) return null;
+		const range = sel.getRangeAt(0);
+		if (!el.contains(range.startContainer)) return null;
+		return range;
+	};
+
+	const focusEditor = () => {
+		const el = editorRef.current;
+		if (!el) return;
+		el.focus();
+		const sel = window.getSelection();
+		const range = document.createRange();
+		range.selectNodeContents(el);
+		range.collapse(false);
+		sel?.removeAllRanges();
+		sel?.addRange(range);
+	};
+
+	const insertTextAtCursor = (text: string) => {
+		const range = getEditorRange();
+		if (!range) return;
+		range.deleteContents();
+		const node = document.createTextNode(text);
+		range.insertNode(node);
+		range.setStartAfter(node);
+		range.collapse(true);
+		const sel = window.getSelection();
+		sel?.removeAllRanges();
+		sel?.addRange(range);
+	};
+
+	const insertSkillChip = (name: string) => {
+		const range = getEditorRange();
+		if (!range) return;
+		// 光标前正在输入的 /xxx 只是联想草稿，先删掉，避免 chip 与纯文本重复
+		const node = range.startContainer;
+		if (node.nodeType === Node.TEXT_NODE && range.startOffset > 0) {
+			const offset = range.startOffset;
+			const match = (node.textContent ?? "").slice(0, offset).match(SKILL_TOKEN_RE);
+			if (match) {
+				const start = offset - match[0].length;
+				const drop = document.createRange();
+				drop.setStart(node, start);
+				drop.setEnd(node, offset);
+				drop.deleteContents();
+				range.setStart(node, start);
+				range.collapse(true);
+			}
+		}
+		const chip = document.createElement("span");
+		chip.className = "omp-skill-chip";
+		chip.setAttribute("contenteditable", "false");
+		chip.setAttribute(SKILL_CHIP_ATTR, name);
+		chip.title = `技能 ${name} · × 或 Backspace 删除`;
+		const remove = document.createElement("span");
+		remove.className = "omp-skill-chip-remove";
+		remove.setAttribute("contenteditable", "false");
+		remove.textContent = "×";
+		const label = document.createElement("span");
+		label.textContent = name;
+		chip.append(remove, label);
+		// 尾随空格既是与后文的间隔，也是光标锚点
+		const tail = document.createTextNode(" ");
+		const fragment = document.createDocumentFragment();
+		fragment.append(chip, tail);
+		range.insertNode(fragment);
+		range.setStartAfter(tail);
+		range.collapse(true);
+		const sel = window.getSelection();
+		sel?.removeAllRanges();
+		sel?.addRange(range);
+	};
+
+	const removeSkillChip = (chip: HTMLElement) => {
+		const blank = chip.nextSibling;
+		if (blank?.nodeType === Node.TEXT_NODE && (blank.textContent ?? "").trim() === "") {
+			blank.parentNode?.removeChild(blank);
+		}
+		chip.remove();
+		syncFromEditor();
+	};
+
+	const onEditorInput = () => {
+		if (composingRef.current) return;
+		syncFromEditor();
+		const range = getEditorRange();
+		if (!range) {
+			setSkillSuggestOpen(false);
+			return;
+		}
+		const node = range.startContainer;
+		const before =
+			node.nodeType === Node.TEXT_NODE && range.startOffset > 0
+				? (node.textContent ?? "").slice(0, range.startOffset)
+				: "";
+		const match = before.match(SKILL_TOKEN_RE);
+		setSkillSuggestOpen(Boolean(match));
+		setSkillQuery(match?.[1] ?? "");
+		setSkillActive(0);
+	};
+
+	const onEditorBeforeInput = (event: ReactFormEvent<HTMLDivElement>) => {
+		// 换行统一写成文本节点里的 \n，配合 white-space: pre-wrap；避免出现 div/br 打乱序列化
+		const inputType = (event.nativeEvent as InputEvent).inputType;
+		if (inputType === "insertParagraph" || inputType === "insertLineBreak") {
+			event.preventDefault();
+			insertTextAtCursor("\n");
+			syncFromEditor();
+		}
+	};
+
+	const onEditorMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
+		const target = event.target as HTMLElement;
+		const removeButton = target.closest(".omp-skill-chip-remove");
+		if (!removeButton) return;
+		event.preventDefault();
+		const chip = removeButton.closest(`[${SKILL_CHIP_ATTR}]`);
+		if (chip instanceof HTMLElement) removeSkillChip(chip);
+	};
+
+	const onEditorKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+		if (skillSuggestOpen && skillSuggestions.length > 0) {
+			if (event.key === "ArrowDown") {
+				event.preventDefault();
+				setSkillActive((current) => (current + 1) % skillSuggestions.length);
+				return;
+			}
+			if (event.key === "ArrowUp") {
+				event.preventDefault();
+				setSkillActive(
+					(current) => (current - 1 + skillSuggestions.length) % skillSuggestions.length,
+				);
+				return;
+			}
+			if (event.key === "Enter" || event.key === "Tab") {
+				event.preventDefault();
+				const chosen = skillSuggestions[skillActive];
+				if (chosen) applySkill(chosen.name);
+				return;
+			}
+			if (event.key === "Escape") {
+				event.preventDefault();
+				setSkillSuggestOpen(false);
+				return;
+			}
+		}
+		if (event.key === "Backspace") {
+			const range = getEditorRange();
+			if (range?.collapsed) {
+				const node = range.startContainer;
+				let chip: Node | null = null;
+				let blank: Node | null = null;
+				if (node.nodeType === Node.TEXT_NODE) {
+					if (range.startOffset === 0) {
+						chip = node.previousSibling;
+					} else if (range.startOffset <= 1 && !(node.textContent ?? "").trim()) {
+						// 光标在 chip 尾随空格里：一次 Backspace 连空格带 chip 删掉
+						chip = node.previousSibling;
+						blank = node;
+					}
+				} else {
+					chip = node.childNodes[range.startOffset - 1] ?? null;
+				}
+				if (chip instanceof HTMLElement && chip.hasAttribute(SKILL_CHIP_ATTR)) {
+					event.preventDefault();
+					if (blank) blank.parentNode?.removeChild(blank);
+					removeSkillChip(chip);
+					return;
+				}
+			}
+		}
+		if (event.key === "Enter" && !event.shiftKey) {
+			event.preventDefault();
+			void send();
+		}
+	};
 
 	const updateMessages = useCallback(
 		(sessionId: string, updater: (prev: ChatMessage[]) => ChatMessage[]) => {
@@ -1707,16 +1930,14 @@ export function App() {
 	}, [messages, permission, running]);
 
 	const send = async (override?: string) => {
-		const raw = (override ?? input).trim();
-		// chip 只是输入态的展示，发给 omp 前还原成它认识的 /skill:<name>；重试走 override，不再叠加 chip
-		const prefix =
-			override === undefined ? skillChips.map((name) => `/skill:${name}`).join(" ") : "";
-		const text = prefix ? `${prefix} ${raw}`.trim() : raw;
+		// inline chip 已在 readEditorText 里还原成 omp 认识的 /skill:<name>；重试走 override 不再读输入区
+		const text = (override ?? readEditorText()).trim();
 		// 正在刷新上下文用量时先让出，避免两个 prompt 并发打到同一会话
 		if (!client || !activeId || !text || running || contextBusyRef.current) return;
 		const sessionId = activeId;
 		const startedAt = Date.now();
 		const userMessageId = uid();
+		if (override === undefined && editorRef.current) editorRef.current.innerHTML = "";
 		setInput("");
 		setSkillChips([]);
 		setSkillSuggestOpen(false);
@@ -1761,7 +1982,7 @@ export function App() {
 			});
 			runningRef.current = false;
 			setRunning(false);
-			inputRef.current?.focus();
+			focusEditor();
 			// 一轮结束后刷新上下文占用（工具输出、消息都会变化）
 			void probeContext(sessionId);
 		}
@@ -1930,40 +2151,36 @@ export function App() {
 			const file = await window.desktop.files.open();
 			if (!file) return;
 			const reference = file.path.includes(" ") ? `@"${file.path}"` : `@${file.path}`;
-			setInput((prev) => `${prev}${prev && !prev.endsWith(" ") ? " " : ""}${reference} `);
-			inputRef.current?.focus();
+			if (!getEditorRange()) focusEditor();
+			const range = getEditorRange();
+			const node = range?.startContainer;
+			const needsSpace =
+				node?.nodeType === Node.TEXT_NODE &&
+				range !== null &&
+				range.startOffset > 0 &&
+				!(node.textContent ?? "").slice(0, range.startOffset).endsWith(" ");
+			insertTextAtCursor(`${needsSpace ? " " : ""}${reference} `);
+			syncFromEditor();
+			editorRef.current?.focus();
 		} catch (error) {
 			setStatus(`引用文件失败：${(error as Error).message}`);
 		}
 	};
 
-	const updateSkillSuggest = (value: string, cursor: number) => {
-		const match = value.slice(0, cursor).match(SKILL_TOKEN_RE);
-		setSkillSuggestOpen(Boolean(match));
-		setSkillQuery(match?.[1] ?? "");
-		setSkillActive(0);
-	};
-
 	const applySkill = (name: string) => {
-		// 已输入的 /skill:xxx 只是联想草稿，选定后交给 chip 承载，避免文本和 chip 重复
-		setInput((prev) => prev.replace(SKILL_TOKEN_RE, (token) => (token.startsWith(" ") ? " " : "")));
-		setSkillChips((prev) => (prev.includes(name) ? prev : [...prev, name]));
+		if (!getEditorRange()) focusEditor();
+		insertSkillChip(name);
 		setSkillSuggestOpen(false);
 		setSkillQuery("");
-		requestAnimationFrame(() => inputRef.current?.focus());
+		syncFromEditor();
+		editorRef.current?.focus();
 	};
 
 	const insertSkillReference = () => {
-		setInput((prev) => `${prev}${prev && !prev.endsWith(" ") ? " " : ""}/`);
-		setSkillSuggestOpen(true);
-		setSkillQuery("");
-		setSkillActive(0);
-		requestAnimationFrame(() => {
-			const el = inputRef.current;
-			if (!el) return;
-			el.focus();
-			el.setSelectionRange(el.value.length, el.value.length);
-		});
+		if (!getEditorRange()) focusEditor();
+		insertTextAtCursor("/");
+		onEditorInput();
+		editorRef.current?.focus();
 	};
 
 	const reloadDoc = async () => {
@@ -2444,8 +2661,10 @@ export function App() {
 														key={hint}
 														type="button"
 														onClick={() => {
-															setInput(hint);
-															inputRef.current?.focus();
+															if (!getEditorRange()) focusEditor();
+															insertTextAtCursor(hint);
+															syncFromEditor();
+															editorRef.current?.focus();
 														}}
 													>
 														{hint}
@@ -2625,85 +2844,28 @@ export function App() {
 											)}
 										</div>
 									)}
-									<div className="omp-composer-input">
-										{skillChips.length > 0 && (
-											<div className="omp-skill-chips">
-												{skillChips.map((name) => (
-													<span className="omp-skill-chip" key={name}>
-														<button
-															type="button"
-															className="omp-skill-chip-remove"
-															onClick={() =>
-																setSkillChips((prev) => prev.filter((item) => item !== name))
-															}
-															aria-label={`移除技能 ${name}`}
-															title="移除技能"
-														>
-															<Icon name="close" size={10} />
-														</button>
-														<span>{name}</span>
-													</span>
-												))}
-											</div>
-										)}
-										<textarea
-											ref={inputRef}
-											rows={1}
-											value={input}
-											onChange={(event) => {
-												const value = event.target.value;
-												setInput(value);
-												updateSkillSuggest(value, event.target.selectionStart ?? value.length);
-											}}
-											onKeyDown={(event) => {
-												// chip 显示在文本前面；光标在文本开头时按 Backspace 删除最后一个 chip
-												if (
-													event.key === "Backspace" &&
-													skillChips.length > 0 &&
-													event.currentTarget.selectionStart === 0 &&
-													event.currentTarget.selectionEnd === 0
-												) {
-													event.preventDefault();
-													setSkillChips((prev) => prev.slice(0, -1));
-													return;
-												}
-												if (skillSuggestOpen && skillSuggestions.length > 0) {
-													if (event.key === "ArrowDown") {
-														event.preventDefault();
-														setSkillActive((current) => (current + 1) % skillSuggestions.length);
-														return;
-													}
-													if (event.key === "ArrowUp") {
-														event.preventDefault();
-														setSkillActive(
-															(current) =>
-																(current - 1 + skillSuggestions.length) % skillSuggestions.length,
-														);
-														return;
-													}
-													if (event.key === "Enter" || event.key === "Tab") {
-														event.preventDefault();
-														const chosen = skillSuggestions[skillActive];
-														if (chosen) applySkill(chosen.name);
-														return;
-													}
-													if (event.key === "Escape") {
-														event.preventDefault();
-														setSkillSuggestOpen(false);
-														return;
-													}
-												}
-												if (event.key === "Enter" && !event.shiftKey) {
-													event.preventDefault();
-													send();
-												}
-											}}
-											placeholder={connected ? "描述任务，按 Enter 发送" : "等待连接 omp…"}
-											disabled={!connected || running}
-											aria-label="任务输入框"
-											onBlur={() => setSkillSuggestOpen(false)}
-										/>
-									</div>
+									<div
+										ref={editorRef}
+										className="omp-composer-input"
+										contentEditable={connected && !running}
+										suppressContentEditableWarning
+										role="textbox"
+										aria-multiline="true"
+										aria-label="任务输入框"
+										data-placeholder={connected ? "描述任务，按 Enter 发送" : "等待连接 omp…"}
+										onInput={onEditorInput}
+										onBeforeInput={onEditorBeforeInput}
+										onKeyDown={onEditorKeyDown}
+										onMouseDown={onEditorMouseDown}
+										onCompositionStart={() => {
+											composingRef.current = true;
+										}}
+										onCompositionEnd={() => {
+											composingRef.current = false;
+											onEditorInput();
+										}}
+										onBlur={() => setSkillSuggestOpen(false)}
+									/>
 									<div className="omp-composer-footer">
 										<div className="omp-composer-hint">
 											<button
@@ -2713,7 +2875,7 @@ export function App() {
 												title="选择文件并插入引用"
 											>
 												<Icon name="folder" size={13} />
-												引用文件
+												<span className="omp-btn-label">引用文件</span>
 											</button>
 											<button
 												type="button"
@@ -2722,14 +2884,16 @@ export function App() {
 												title="输入 / 选择技能指令"
 											>
 												<Icon name="spark" size={13} />
-												技能
+												<span className="omp-btn-label">技能</span>
 											</button>
 											{currentModeName && (
-												<span className="omp-hint-tag" title="推理档位">
+												<span className="omp-hint-tag omp-mode-label" title="推理档位">
 													{currentModeName}
 												</span>
 											)}
-											<span title={settings.cwd}>{shortPath(settings.cwd)}</span>
+											<span className="omp-path-label" title={settings.cwd}>
+												{shortPath(settings.cwd)}
+											</span>
 										</div>
 										<div className="omp-composer-tools">
 											<span className="omp-approval-wrap" ref={approvalRef}>
@@ -2743,7 +2907,9 @@ export function App() {
 													aria-expanded={approvalOpen}
 												>
 													<Icon name="shield" size={13} />
-													<span>{APPROVAL_LABEL[settings.approvalMode]}</span>
+													<span className="omp-btn-label">
+														{APPROVAL_LABEL[settings.approvalMode]}
+													</span>
 													<Icon name="chevron" size={12} />
 												</button>
 												{approvalOpen && (
@@ -2784,7 +2950,7 @@ export function App() {
 												aria-label="模型与推理档位"
 											>
 												<Icon name="spark" size={13} />
-												<span>{currentModelName || "模型"}</span>
+												<span className="omp-model-label">{currentModelName || "模型"}</span>
 												<Icon name="chevron" size={12} />
 											</button>
 											<span className="omp-context-wrap" ref={contextRef}>
@@ -2843,7 +3009,8 @@ export function App() {
 													onClick={cancel}
 													title="停止当前任务"
 												>
-													<Icon name="stop" size={13} /> 停止
+													<Icon name="stop" size={13} />
+													<span className="omp-btn-label">停止</span>
 												</button>
 											) : (
 												<button
@@ -2853,7 +3020,8 @@ export function App() {
 													disabled={!connected || !input.trim()}
 													title="发送"
 												>
-													<Icon name="send" size={13} /> 发送
+													<Icon name="send" size={13} />
+													<span className="omp-btn-label">发送</span>
 												</button>
 											)}
 										</div>
