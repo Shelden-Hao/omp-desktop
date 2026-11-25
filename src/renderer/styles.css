@@ -1486,9 +1486,10 @@ details[open] > summary .omp-fold-chevron {
   border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent-hover);
-  font-size: var(--font-md);
+  /* 字号与行高必须和输入框一致，否则两者文字基线永远对不齐 */
+  font-size: var(--font-lg);
   font-weight: 600;
-  line-height: 22px;
+  line-height: 24px;
 }
 .omp-skill-chip-remove {
   display: grid;

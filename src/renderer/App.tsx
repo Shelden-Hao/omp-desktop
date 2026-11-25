@@ -2653,6 +2653,17 @@ export function App() {
 												updateSkillSuggest(value, event.target.selectionStart ?? value.length);
 											}}
 											onKeyDown={(event) => {
+												// chip 显示在文本前面；光标在文本开头时按 Backspace 删除最后一个 chip
+												if (
+													event.key === "Backspace" &&
+													skillChips.length > 0 &&
+													event.currentTarget.selectionStart === 0 &&
+													event.currentTarget.selectionEnd === 0
+												) {
+													event.preventDefault();
+													setSkillChips((prev) => prev.slice(0, -1));
+													return;
+												}
 												if (skillSuggestOpen && skillSuggestions.length > 0) {
 													if (event.key === "ArrowDown") {
 														event.preventDefault();
