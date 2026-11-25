@@ -117,6 +117,54 @@ function formatDuration(ms?: number) {
 	return `${minutes}分${seconds % 60}秒`;
 }
 
+/** 思考强度 / 运行模式的展示文案，取值来自 ACP，未知值原样显示 */
+const THINKING_LABEL: Record<string, string> = {
+	off: "关闭",
+	none: "关闭",
+	auto: "自动",
+	minimal: "极低",
+	low: "低",
+	medium: "中",
+	high: "高",
+	xhigh: "很高",
+	max: "最大",
+};
+
+const MODE_LABEL: Record<string, string> = {
+	default: "默认",
+	plan: "规划",
+	accept_edits: "自动编辑",
+	read_only: "只读",
+};
+
+function pickLabel(map: Record<string, string>, value?: string, fallback?: string) {
+	if (value && map[value]) return map[value];
+	return fallback || value || "";
+}
+
+/** 上下文窗口按 1.0M / 288K 展示 */
+function formatContext(tokens: number) {
+	if (tokens >= 1_000_000) {
+		const millions = tokens / 1_000_000;
+		return `${Number.isInteger(millions) ? millions : millions.toFixed(1)}M`;
+	}
+	return `${Math.round(tokens / 1000)}K`;
+}
+
+interface ModelRowOption {
+	value: string;
+	label: string;
+}
+
+interface ModelRow {
+	id: string;
+	label: string;
+	valueLabel: string;
+	currentValue?: string;
+	options?: ModelRowOption[];
+	onSelect?: (value: string) => void;
+}
+
 function extractText(value: unknown): string {
 	if (typeof value === "string") return value;
 	if (Array.isArray(value)) return value.map(extractText).filter(Boolean).join("");
@@ -758,6 +806,8 @@ export function App() {
 	const [atBottom, setAtBottom] = useState(true);
 	const [sessionStates, setSessionStates] = useState<Record<string, SessionState>>({});
 	const [modelMenuOpen, setModelMenuOpen] = useState(false);
+	const [modelContexts, setModelContexts] = useState<Record<string, number>>({});
+	const [openModelRow, setOpenModelRow] = useState<string | null>(null);
 
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -826,6 +876,46 @@ export function App() {
 			document.removeEventListener("keydown", onKeyDown);
 		};
 	}, [filterOpen]);
+
+	// 模型面板打开时刷新一次容量信息（用户可能刚在设置里加过自定义模型）
+	useEffect(() => {
+		if (!modelMenuOpen) return;
+		let cancelled = false;
+		window.desktop.models
+			.context()
+			.then((items) => {
+				if (cancelled) return;
+				const map: Record<string, number> = {};
+				for (const item of items) {
+					if (item.contextWindow) map[item.value] = item.contextWindow;
+				}
+				setModelContexts(map);
+			})
+			.catch(() => {
+				// models.yml 读不到就不显示上下文窗口，不影响模型切换
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [modelMenuOpen]);
+
+	useEffect(() => {
+		if (!modelMenuOpen) return;
+		const onPointerDown = (event: MouseEvent) => {
+			const target = event.target as HTMLElement | null;
+			if (target?.closest(".omp-model-panel") || target?.closest(".omp-model-trigger")) return;
+			setModelMenuOpen(false);
+		};
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") setModelMenuOpen(false);
+		};
+		document.addEventListener("mousedown", onPointerDown);
+		document.addEventListener("keydown", onKeyDown);
+		return () => {
+			document.removeEventListener("mousedown", onPointerDown);
+			document.removeEventListener("keydown", onKeyDown);
+		};
+	}, [modelMenuOpen]);
 
 	const updateAtBottom = () => {
 		const el = scrollRef.current;
@@ -1519,7 +1609,10 @@ export function App() {
 	);
 	const otherSelects =
 		activeState?.configOptions.filter(
-			(option) => option.id !== modelOption?.id && option.id !== thoughtOption?.id,
+			(option) =>
+				option.id !== modelOption?.id &&
+				option.id !== thoughtOption?.id &&
+				option.category !== "mode",
 		) || [];
 	const currentModeName = activeState?.modes?.availableModes.find(
 		(mode) => mode.id === activeState.modes?.currentModeId,
@@ -1527,6 +1620,62 @@ export function App() {
 	const currentModelName =
 		modelOption?.options?.find((item) => item.value === modelOption.currentValue)?.name ||
 		modelOption?.currentValue;
+
+	// 模型详情面板的配置行：只列 omp 真实提供的能力
+	const modelRows: ModelRow[] = [];
+	if (activeState?.modes && activeState.modes.availableModes.length > 0) {
+		modelRows.push({
+			id: "mode",
+			label: "运行模式",
+			valueLabel: pickLabel(MODE_LABEL, activeState.modes.currentModeId),
+			currentValue: activeState.modes.currentModeId,
+			options: activeState.modes.availableModes.map((mode) => ({
+				value: mode.id,
+				label: pickLabel(MODE_LABEL, mode.id, mode.name),
+			})),
+			onSelect: (value) => void changeMode(value),
+		});
+	}
+	if (thoughtOption?.options && thoughtOption.options.length > 0) {
+		modelRows.push({
+			id: thoughtOption.id,
+			label: "思考强度",
+			valueLabel: pickLabel(THINKING_LABEL, thoughtOption.currentValue),
+			currentValue: thoughtOption.currentValue,
+			options: thoughtOption.options.map((item) => ({
+				value: item.value,
+				label: pickLabel(THINKING_LABEL, item.value, item.name),
+			})),
+			onSelect: (value) => void changeConfigOption(thoughtOption.id, value),
+		});
+	}
+	for (const option of otherSelects) {
+		if (option.type === "boolean") {
+			modelRows.push({
+				id: option.id,
+				label: option.name,
+				valueLabel: option.currentBoolean ? "已开启" : "已关闭",
+				onSelect: () => void changeConfigOption(option.id, !option.currentBoolean),
+			});
+			continue;
+		}
+		if (!option.options || option.options.length === 0) continue;
+		modelRows.push({
+			id: option.id,
+			label: option.name,
+			valueLabel:
+				option.options.find((item) => item.value === option.currentValue)?.name ||
+				option.currentValue ||
+				"",
+			currentValue: option.currentValue,
+			options: option.options.map((item) => ({ value: item.value, label: item.name })),
+			onSelect: (value) => void changeConfigOption(option.id, value),
+		});
+	}
+	const currentContext = modelOption?.currentValue
+		? modelContexts[modelOption.currentValue]
+		: undefined;
+	const activeRow = modelRows.find((row) => row.id === openModelRow);
 
 	return (
 		<div className="omp-app">
@@ -2080,7 +2229,10 @@ export function App() {
 											<button
 												type="button"
 												className={`omp-model-trigger ${modelMenuOpen ? "active" : ""}`}
-												onClick={() => setModelMenuOpen((value) => !value)}
+												onClick={() => {
+													setOpenModelRow(null);
+													setModelMenuOpen((value) => !value);
+												}}
 												title="模型与推理档位"
 												aria-label="模型与推理档位"
 											>
@@ -2111,132 +2263,124 @@ export function App() {
 										</div>
 									</div>
 									{modelMenuOpen && (
-										<div className="omp-model-menu">
-											<div className="omp-model-menu-head">
-												<span>
-													<Icon name="spark" size={14} /> 模型与推理档位
-												</span>
-												<button
-													type="button"
-													className="omp-icon-button"
-													onClick={() => setModelMenuOpen(false)}
-													title="关闭"
-													aria-label="关闭"
-												>
-													<Icon name="close" size={13} />
-												</button>
-											</div>
-											<div className="omp-model-menu-body">
-												{activeState?.modes && activeState.modes.availableModes.length > 0 && (
-													<div className="omp-model-section">
-														<div className="omp-model-section-title">推理档位</div>
-														{activeState.modes.availableModes.map((mode) => (
-															<button
-																key={mode.id}
-																type="button"
-																className={`omp-model-item ${mode.id === activeState.modes?.currentModeId ? "active" : ""}`}
-																onClick={() => void changeMode(mode.id)}
-															>
-																<span>{mode.name}</span>
-																{mode.description && <small>{mode.description}</small>}
-																{mode.id === activeState.modes?.currentModeId && (
-																	<Icon name="check" size={14} />
-																)}
-															</button>
-														))}
-													</div>
-												)}
-												{modelOption && modelOption.options && modelOption.options.length > 0 && (
-													<div className="omp-model-section">
-														<div className="omp-model-section-title">{modelOption.name}</div>
-														{modelOption.options.map((item) => (
+										<div className="omp-model-panel" role="dialog" aria-label="模型设置">
+											<div className="omp-model-list">
+												<div className="omp-model-list-body">
+													{(modelOption?.options || []).map((item) => {
+														const active = item.value === modelOption?.currentValue;
+														const context = modelContexts[item.value];
+														return (
 															<button
 																key={item.value}
 																type="button"
-																className={`omp-model-item ${item.value === modelOption.currentValue ? "active" : ""}`}
-																onClick={() => void changeConfigOption(modelOption.id, item.value)}
+																className={`omp-model-option ${active ? "active" : ""}`}
+																title={item.name}
+																onClick={() => {
+																	if (modelOption)
+																		void changeConfigOption(modelOption.id, item.value);
+																}}
 															>
-																<span>{item.name}</span>
-																{item.description && <small>{item.description}</small>}
-																{item.value === modelOption.currentValue && (
-																	<Icon name="check" size={14} />
+																<span className="omp-model-option-name">{item.name}</span>
+																{context !== undefined && (
+																	<span className="omp-model-option-ctx">
+																		{formatContext(context)}
+																	</span>
 																)}
+																{active && <Icon name="check" size={14} />}
 															</button>
-														))}
-													</div>
-												)}
-												{thoughtOption &&
-													thoughtOption.options &&
-													thoughtOption.options.length > 0 && (
-														<div className="omp-model-section">
-															<div className="omp-model-section-title">{thoughtOption.name}</div>
-															{thoughtOption.options.map((item) => (
-																<button
-																	key={item.value}
-																	type="button"
-																	className={`omp-model-item ${item.value === thoughtOption.currentValue ? "active" : ""}`}
-																	onClick={() =>
-																		void changeConfigOption(thoughtOption.id, item.value)
-																	}
-																>
-																	<span>{item.name}</span>
-																	{item.value === thoughtOption.currentValue && (
-																		<Icon name="check" size={14} />
-																	)}
-																</button>
-															))}
-														</div>
+														);
+													})}
+													{!modelOption?.options?.length && (
+														<div className="omp-model-empty">当前 omp 未提供可切换的模型</div>
 													)}
-												{otherSelects.map((option) => (
-													<div className="omp-model-section" key={option.id}>
-														<div className="omp-model-section-title">{option.name}</div>
-														{option.type === "boolean" ? (
+												</div>
+												<button
+													type="button"
+													className="omp-model-config"
+													onClick={() => {
+														setModelMenuOpen(false);
+														setShowSettings(true);
+													}}
+												>
+													<Icon name="settings" size={13} /> 配置自定义模型
+												</button>
+											</div>
+
+											<div className="omp-model-detail">
+												<div className="omp-model-detail-head">
+													<strong title={currentModelName}>{currentModelName || "模型"}</strong>
+													{modelOption?.currentValue && <span>{modelOption.currentValue}</span>}
+												</div>
+												<div className="omp-model-detail-rows">
+													{activeRow ? (
+														<div className="omp-model-drill">
 															<button
 																type="button"
-																className={`omp-model-item ${option.currentBoolean ? "active" : ""}`}
-																onClick={() =>
-																	void changeConfigOption(option.id, !option.currentBoolean)
-																}
+																className="omp-model-drill-head"
+																onClick={() => setOpenModelRow(null)}
 															>
-																<span>{option.currentBoolean ? "已开启" : "已关闭"}</span>
+																<Icon name="chevron-right" size={12} />
+																<span>{activeRow.label}</span>
 															</button>
-														) : (
-															(option.options || []).map((item) => (
-																<button
-																	key={item.value}
-																	type="button"
-																	className={`omp-model-item ${item.value === option.currentValue ? "active" : ""}`}
-																	onClick={() => void changeConfigOption(option.id, item.value)}
-																>
-																	<span>{item.name}</span>
-																	{item.value === option.currentValue && (
-																		<Icon name="check" size={14} />
-																	)}
-																</button>
-															))
-														)}
-													</div>
-												))}
-												{!activeState?.modes?.availableModes.length &&
-													!modelOption &&
-													otherSelects.length === 0 && (
-														<div className="omp-model-empty">
-															当前 omp 未提供可切换的模型或档位。
-															<br />
-															可在设置中修改 omp 配置。
+															<div className="omp-model-drill-body">
+																{activeRow.options?.map((option) => (
+																	<button
+																		key={option.value}
+																		type="button"
+																		className={`omp-model-sub ${option.value === activeRow.currentValue ? "active" : ""}`}
+																		onClick={() => {
+																			activeRow.onSelect?.(option.value);
+																			setOpenModelRow(null);
+																		}}
+																	>
+																		<span>{option.label}</span>
+																		{option.value === activeRow.currentValue && (
+																			<Icon name="check" size={13} />
+																		)}
+																	</button>
+																))}
+															</div>
 														</div>
+													) : (
+														<>
+															{modelRows.map((row) => (
+																<div className="omp-model-row" key={row.id}>
+																	<button
+																		type="button"
+																		className="omp-model-row-btn"
+																		onClick={() => {
+																			if (row.options?.length) {
+																				setOpenModelRow(row.id);
+																				return;
+																			}
+																			row.onSelect?.("");
+																		}}
+																	>
+																		<span className="omp-model-row-label">{row.label}</span>
+																		<span className="omp-model-row-value">
+																			{row.valueLabel}
+																			{row.options?.length ? (
+																				<Icon name="chevron-right" size={12} />
+																			) : null}
+																		</span>
+																	</button>
+																</div>
+															))}
+															{currentContext !== undefined && (
+																<div className="omp-model-row static">
+																	<span className="omp-model-row-label">上下文窗口</span>
+																	<span className="omp-model-row-value">
+																		{formatContext(currentContext)}
+																	</span>
+																</div>
+															)}
+															{modelRows.length === 0 && currentContext === undefined && (
+																<div className="omp-model-empty">当前模型没有可调配置。</div>
+															)}
+														</>
 													)}
+												</div>
 											</div>
-											<button
-												type="button"
-												className="omp-model-config"
-												onClick={() => {
-													setModelMenuOpen(false);
-													setShowSettings(true);
-												}}
-											>
-												<Icon name="settings" size={13} /> 配置自定义模型
-											</button>
 										</div>
 									)}
 								</div>

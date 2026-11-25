@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
 	DesktopSettings,
+	ModelContextInfo,
 	OpenedFile,
 	StoredSession,
 	ToolResult,
@@ -14,6 +15,9 @@ export interface DesktopBridge {
 	sessions: {
 		get(): Promise<StoredSession[]>;
 		set(next: StoredSession[]): Promise<StoredSession[]>;
+	};
+	models: {
+		context(): Promise<ModelContextInfo[]>;
 	};
 	files: {
 		open(): Promise<OpenedFile | null>;
@@ -52,6 +56,9 @@ const bridge: DesktopBridge = {
 	sessions: {
 		get: () => ipcRenderer.invoke("sessions:get"),
 		set: (next) => ipcRenderer.invoke("sessions:set", next),
+	},
+	models: {
+		context: () => ipcRenderer.invoke("models:context"),
 	},
 	files: {
 		open: () => ipcRenderer.invoke("file:open"),

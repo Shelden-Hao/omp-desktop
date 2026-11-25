@@ -20,6 +20,13 @@ export interface StoredSession {
   ts?: number;
 }
 
+/** omp models.yml 里的模型容量信息，用于模型面板展示上下文窗口 */
+export interface ModelContextInfo {
+  value: string;
+  contextWindow?: number;
+  maxTokens?: number;
+}
+
 export interface OpenedFile {
   path: string;
   name: string;
@@ -52,6 +59,9 @@ export interface AcpBridge {
   sessions: {
     get(): Promise<StoredSession[]>;
     set(next: StoredSession[]): Promise<StoredSession[]>;
+  };
+  models: {
+    context(): Promise<ModelContextInfo[]>;
   };
   files: {
     open(): Promise<OpenedFile | null>;

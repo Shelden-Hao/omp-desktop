@@ -12,6 +12,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { readModelContexts } from "./model-context";
 
 // ---------------------------------------------------------------------------
 // 配置：全部可改，默认自动探测本机已安装的 bun + omp
@@ -579,6 +580,7 @@ app.whenReady().then(() => {
 		saveSessions(next);
 		return next;
 	});
+	ipcMain.handle("models:context", () => readModelContexts());
 
 	ipcMain.handle("file:open", async () => {
 		const result = await dialog.showOpenDialog({
