@@ -1,0 +1,96 @@
+/**
+ * 会话消息仓库：所有消息数组的读写都走这里。
+ * 组件层只拿 messagesBySession 渲染，写入只暴露 append / update 的语义化方法，
+ * 避免各处手动拼 `{...prev, [id]: ...}`。
+ */
+
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import type { ChatMessage, ContentBlock } from "../../shared/types";
+import {
+  appendBlock as reduceAppendBlock,
+  appendUserChunk as reduceAppendUserChunk,
+  updateToolBlock,
+} from "../core/session-reducer";
+
+export interface MessageStore {
+  messagesBySession: Record<string, ChatMessage[]>;
+  setMessagesBySession: React.Dispatch<React.SetStateAction<Record<string, ChatMessage[]>>>;
+  /** 消息镜像：loadSessionHistory 清空前先留一份，omp 回放不出历史时用它兜底 */
+  messagesRef: React.RefObject<Record<string, ChatMessage[]>>;
+  updateMessages: (sessionId: string, updater: (prev: ChatMessage[]) => ChatMessage[]) => void;
+  appendBlock: (sessionId: string, block: ContentBlock, toolCallId?: string) => void;
+  appendUserChunk: (sessionId: string, text: string) => void;
+  updateToolStatus: (
+    sessionId: string,
+    toolCallId: string,
+    next: "completed" | "failed",
+    result?: string,
+    title?: string,
+  ) => void;
+  /** 工具调用 ID → 所在消息下标，用于 O(1) 定位 */
+  toolIndex: React.RefObject<Map<string, number>>;
+}
+
+export function useMessageStore(): MessageStore {
+  const [messagesBySession, setMessagesBySession] = useState<Record<string, ChatMessage[]>>({});
+  const messagesRef = useRef<Record<string, ChatMessage[]>>({});
+  const toolIndex = useRef<Map<string, number>>(new Map());
+
+  // 镜像必须在清空之前就位，否则 loadSessionHistory 拿不到上一份内容做兜底
+  useLayoutEffect(() => {
+    messagesRef.current = messagesBySession;
+  }, [messagesBySession]);
+
+  const updateMessages = useCallback(
+    (sessionId: string, updater: (prev: ChatMessage[]) => ChatMessage[]) => {
+      setMessagesBySession((prev) => ({ ...prev, [sessionId]: updater(prev[sessionId] || []) }));
+    },
+    [],
+  );
+
+  const appendBlock = useCallback(
+    (sessionId: string, block: ContentBlock, toolCallId?: string) => {
+      updateMessages(sessionId, (prev) => {
+        const { messages: next, index } = reduceAppendBlock(prev, block);
+        if (toolCallId) toolIndex.current.set(`${sessionId}:${toolCallId}`, index);
+        return next;
+      });
+    },
+    [updateMessages],
+  );
+
+  const appendUserChunk = useCallback(
+    (sessionId: string, text: string) => {
+      updateMessages(sessionId, (prev) => reduceAppendUserChunk(prev, text));
+    },
+    [updateMessages],
+  );
+
+  const updateToolStatus = useCallback(
+    (
+      sessionId: string,
+      toolCallId: string,
+      next: "completed" | "failed",
+      result?: string,
+      title?: string,
+    ) => {
+      const index = toolIndex.current.get(`${sessionId}:${toolCallId}`);
+      if (index === undefined) return;
+      updateMessages(sessionId, (prev) =>
+        updateToolBlock(prev, toolCallId, { status: next, result, title }),
+      );
+    },
+    [updateMessages],
+  );
+
+  return {
+    messagesBySession,
+    setMessagesBySession,
+    messagesRef,
+    updateMessages,
+    appendBlock,
+    appendUserChunk,
+    updateToolStatus,
+    toolIndex,
+  };
+}
