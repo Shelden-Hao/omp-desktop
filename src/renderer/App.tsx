@@ -61,8 +61,8 @@ import {
 } from "./core/resources";
 import { detectSensitive } from "./core/security/sensitive";
 import { extractText, formatToolInput } from "./core/tool-input";
-import { SettingsPanel } from "./SettingsPanel";
-import { SkillsPanel } from "./SkillsPanel";
+import { SettingsPanel } from "./panels/SettingsPanel";
+import { SkillsPanel } from "./panels/SkillsPanel";
 
 interface PermissionState {
 	sessionId: string;

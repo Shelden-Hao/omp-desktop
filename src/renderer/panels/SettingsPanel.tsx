@@ -16,7 +16,7 @@ import {
 	type SystemInfoData,
 	type ThemeMode,
 	type ToolPolicy,
-} from "../shared/types";
+} from "../../shared/types";
 
 interface SettingsPanelProps {
 	settings: DesktopSettings;

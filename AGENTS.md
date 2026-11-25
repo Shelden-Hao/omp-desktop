@@ -28,6 +28,7 @@ renderer/ ← 只依赖 shared + react
 - **`main/platform/*` 只包系统 API**：`powerSaveBlocker`、`session.setProxy`、`setLoginItemSettings`、`shell.*`、`dialog.*` 一律集中在这里。
 - **`renderer/core/*` 不 import React**：纯函数、纯类，可以被任意组件复用，也可以直接单测。
 - **`renderer/components/*` 不自取数据**：不发 IPC、不读 `settings` 全局，只通过 props 接收数据与回调。
+- **`renderer/panels/*` 才是容器**：设置页、技能页这种「一整块业务」的界面可以自己调 `window.desktop`、自己管内部状态；判断标准是「这块能不能被单独放进另一个页面复用」，能就写面板、不能就写组件。
 - **`App.tsx` 只做装配**：不放解析、格式化、正则匹配、DOM 操作；这些属于 `core/`。
 
 ### 文件职责
