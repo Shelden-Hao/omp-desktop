@@ -14,6 +14,7 @@ import { useElapsed } from "../../hooks/use-elapsed";
 import { Icon } from "../common/Icon";
 import { Block } from "./ContentBlock";
 import { MessageActions } from "./MessageActions";
+import { MessageRail } from "./MessageRail";
 
 /** 空状态里的示例任务，点一下填进输入框 */
 const HOME_HINTS = ["解释当前目录的代码结构", "帮我修复一个失败的测试", "梳理这个项目的待办事项"];
@@ -94,6 +95,7 @@ export function MessageList({
 					</div>
 				)}
 			</div>
+			<MessageRail messages={messages} scrollRef={scrollRef} />
 			{!atBottom && (
 				<div className="omp-scroll-bottom">
 					<button
