@@ -37,7 +37,14 @@ app.whenReady().then(() => {
 	});
 });
 
-app.on("window-all-closed", () => {
-	stopAgent();
-	if (process.platform !== "darwin") app.quit();
+let quitting = false;
+
+app.on("window-all-closed", async () => {
+	if (process.platform === "darwin") return;
+	// 关窗前先让 omp 优雅退出，会话落盘后再退出应用
+	if (!quitting) {
+		quitting = true;
+		await stopAgent();
+	}
+	app.quit();
 });

@@ -17,7 +17,6 @@ export interface AgentOutput {
 }
 
 let agent: ChildProcess | null = null;
-let stdoutBuffer = "";
 let output: AgentOutput | null = null;
 
 /** 由 IPC 层注入广播实现；窗口尚未就绪时事件直接丢弃 */
@@ -47,9 +46,9 @@ export function composeSystemPrompt(): string {
 	return parts.join("\n\n");
 }
 
-export function startAgent(): { ok: boolean; error?: string } {
-	stopAgent();
-	stdoutBuffer = "";
+export async function startAgent(): Promise<{ ok: boolean; error?: string }> {
+	// 等旧进程真正退出再拉新的，否则两个 omp 会同时持有同一份会话存储
+	await stopAgent();
 	const settings = getSettings();
 
 	if (!existsSync(settings.bunPath)) {
@@ -62,11 +61,12 @@ export function startAgent(): { ok: boolean; error?: string } {
 		mkdirSync(settings.cwd, { recursive: true });
 	}
 
+	let child: ChildProcess;
 	try {
 		const args = [settings.ompCliPath, "acp", `--approval-mode=${settings.approvalMode}`];
 		const appended = composeSystemPrompt();
 		if (appended) args.push(`--append-system-prompt=${appended}`);
-		agent = spawn(settings.bunPath, args, {
+		child = spawn(settings.bunPath, args, {
 			cwd: settings.cwd,
 			env: proxyEnv(settings.proxyMode, settings.proxyUrl),
 			stdio: ["pipe", "pipe", "pipe"],
@@ -75,10 +75,14 @@ export function startAgent(): { ok: boolean; error?: string } {
 	} catch (e) {
 		return { ok: false, error: `启动 omp 失败：${(e as Error).message}` };
 	}
+	agent = child;
 	syncPowerBlockers(settings, true);
 
-	agent.stdout?.setEncoding("utf8");
-	agent.stdout?.on("data", (chunk: string) => {
+	// 切分缓冲区跟着进程走：重启时旧进程若还有残余帧，不能污染新进程的半个 frame
+	let stdoutBuffer = "";
+	child.stdout?.setEncoding("utf8");
+	child.stdout?.on("data", (chunk: string) => {
+		if (agent !== child) return;
 		stdoutBuffer += chunk;
 		let idx: number;
 		while ((idx = stdoutBuffer.indexOf("\n")) >= 0) {
@@ -88,30 +92,66 @@ export function startAgent(): { ok: boolean; error?: string } {
 		}
 	});
 
-	agent.stderr?.setEncoding("utf8");
-	agent.stderr?.on("data", (chunk: string) => output?.stderr(chunk));
+	child.stderr?.setEncoding("utf8");
+	child.stderr?.on("data", (chunk: string) => {
+		if (agent !== child) return;
+		output?.stderr(chunk);
+	});
 
-	agent.on("exit", (code) => {
-		output?.exit(String(code ?? 0));
+	child.on("exit", (code) => {
+		// 只有「仍是当前进程」才算真的退出。切换安全等级会 kill 旧进程再 spawn 新进程，
+		// 旧进程的 exit 迟到一步就会把新进程的引用清成 null，之后所有请求都报「omp 未运行」。
+		if (agent !== child) return;
 		agent = null;
+		output?.exit(String(code ?? 0));
 		syncPowerBlockers(getSettings(), false);
 	});
 
-	agent.on("error", (e) => {
+	child.on("error", (e) => {
 		output?.stderr(`[spawn error] ${e.message}`);
 	});
 
 	return { ok: true };
 }
 
-export function stopAgent() {
+let pendingStop: Promise<void> | null = null;
+
+/**
+ * 优雅停止：先关 stdin 让 omp 走完自己的退出流程（会话要落盘、上下文才不会丢），
+ * 超过宽限期还不退再 kill。切换安全等级就要走这条路，直接 SIGKILL 会让 omp 来不及写盘。
+ */
+export function stopAgent(waitMs = 2500): Promise<void> {
+	if (pendingStop) return pendingStop;
+	const stopping = agent;
+	// 先摘引用：exit 回调看到 agent !== child 就不会再广播一次退出
+	agent = null;
 	releaseAllTerminals();
-	if (agent) {
-		agent.stdin?.end();
-		agent.kill();
-		agent = null;
+	if (!stopping) {
+		syncPowerBlockers(getSettings(), false);
+		return Promise.resolve();
 	}
-	syncPowerBlockers(getSettings(), false);
+	stopping.stdin?.end();
+	pendingStop = new Promise<void>((resolve) => {
+		let settled = false;
+		const finish = () => {
+			if (settled) return;
+			settled = true;
+			pendingStop = null;
+			syncPowerBlockers(getSettings(), false);
+			resolve();
+		};
+		const timer = setTimeout(() => stopping.kill(), waitMs);
+		stopping.once("exit", () => {
+			clearTimeout(timer);
+			finish();
+		});
+		// 进程可能在我们挂监听之前就已经退了，此时 exit 不会再触发
+		if (stopping.exitCode !== null || stopping.signalCode !== null) {
+			clearTimeout(timer);
+			finish();
+		}
+	});
+	return pendingStop;
 }
 
 /** ACP 请求经 stdin 写入，NDJSON 一行一帧 */

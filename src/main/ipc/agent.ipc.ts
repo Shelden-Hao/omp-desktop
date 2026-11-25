@@ -33,8 +33,8 @@ export function registerAgentIpc() {
 	}
 
 	ipcMain.handle("agent:start", () => startAgent());
-	ipcMain.handle("agent:stop", () => {
-		stopAgent();
+	ipcMain.handle("agent:stop", async () => {
+		await stopAgent();
 		return { ok: true };
 	});
 	ipcMain.handle("agent:status", () => ({ running: isAgentRunning() }));
