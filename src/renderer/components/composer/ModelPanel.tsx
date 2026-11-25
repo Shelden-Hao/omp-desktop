@@ -22,7 +22,7 @@ export interface ModelRow {
 	onSelect?: (value: string) => void;
 }
 
-interface ModelPanelProps {
+export interface ModelPanelProps {
 	open: boolean;
 	modelName?: string;
 	/** omp 提供的模型选择项（category=model 的 configOption） */

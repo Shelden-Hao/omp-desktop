@@ -18,7 +18,7 @@ export interface SuggestEntry {
 	detail: string;
 }
 
-interface SuggestMenuProps {
+export interface SuggestMenuProps {
 	/** 列表标题，如「引用资源」 */
 	label: string;
 	/** 括号里的计数 */

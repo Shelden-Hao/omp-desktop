@@ -7,7 +7,7 @@ import type { ApprovalMode } from "../../../shared/types";
 import { APPROVAL_HINT, APPROVAL_LABEL, APPROVAL_OPTIONS } from "../../core/labels";
 import { Icon } from "../common/Icon";
 
-interface ApprovalMenuProps {
+export interface ApprovalMenuProps {
 	open: boolean;
 	mode: ApprovalMode;
 	wrapRef: RefObject<HTMLSpanElement | null>;

@@ -32,7 +32,7 @@ export function Block({
 	query = "",
 }: {
 	block: ContentBlock;
-	onOpenDoc: (name: string, content: string) => void;
+	onOpenDoc: (name: string, content: string, path?: string) => void;
 	query?: string;
 }) {
 	if (block.type === "thinking") {

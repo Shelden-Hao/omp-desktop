@@ -14,7 +14,7 @@ import { Icon } from "../common/Icon";
 /** 聚合菜单里可展开的二级菜单 */
 export type EntrySubmenu = "mode" | "skills" | "connectors" | null;
 
-interface EntryMenuProps {
+export interface EntryMenuProps {
 	open: boolean;
 	submenu: EntrySubmenu;
 	onToggleOpen(): void;

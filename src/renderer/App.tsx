@@ -38,20 +38,17 @@ import {
 	type StatusFilter,
 	type TimeFilter,
 } from "./core/session-filters";
-import { Block } from "./components/chat/ContentBlock";
-import { MessageActions } from "./components/chat/MessageActions";
-import { ApprovalMenu } from "./components/composer/ApprovalMenu";
-import { ContextPanel } from "./components/composer/ContextPanel";
-import { EntryMenu, type EntrySubmenu } from "./components/composer/EntryMenu";
-import { type ModelRow, ModelPanel } from "./components/composer/ModelPanel";
-import { SuggestMenu } from "./components/composer/SuggestMenu";
+import { MessageList } from "./components/chat/MessageList";
+import { Composer } from "./components/composer/Composer";
+import type { EntrySubmenu } from "./components/composer/EntryMenu";
+import type { ModelRow } from "./components/composer/ModelPanel";
 import { PreviewPane } from "./components/layout/PreviewPane";
 import { Sidebar } from "./components/layout/Sidebar";
 import { TitleBar } from "./components/layout/TitleBar";
 import { PermissionDialog } from "./components/modals/PermissionDialog";
 import { SensitiveDialog } from "./components/modals/SensitiveDialog";
 import { DEFAULT_DOCS, type DocFile } from "./core/docs";
-import { formatDuration, pickLabel, shortPath } from "./core/format";
+import { pickLabel } from "./core/format";
 import { APPROVAL_LABEL, THINKING_LABEL } from "./core/labels";
 import {
 	extractPathsFromMessages,
@@ -1547,347 +1544,161 @@ export function App() {
 									</button>
 								</div>
 							)}
-							<div className="omp-messages-wrap">
-								<div className="omp-messages" ref={scrollRef} onScroll={updateAtBottom}>
-									{visibleMessages.length === 0 && (
-										<div className="omp-empty">
-											<div className="omp-empty-mark">
-												<Icon name="spark" size={28} />
-											</div>
-											<h2>把任务交给 omp</h2>
-											<p>它会在当前工作目录中读取文件、执行命令，并把过程展现在这里。</p>
-											<div className="omp-empty-hints">
-												{settings.homeSuggestions &&
-													[
-														"解释当前目录的代码结构",
-														"帮我修复一个失败的测试",
-														"梳理这个项目的待办事项",
-													].map((hint) => (
-														<button
-															key={hint}
-															type="button"
-															onClick={() => {
-																if (!editor.range()) editor.focus();
-																editor.insertText(hint);
-																syncFromEditor();
-																editor.focus();
-															}}
-														>
-															{hint}
-															<Icon name="chevron-right" size={12} />
-														</button>
-													))}
-											</div>
-										</div>
-									)}
+							<MessageList
+								messages={visibleMessages}
+								running={running}
+								query={searchText.trim()}
+								atBottom={atBottom}
+								suggestionsEnabled={settings.homeSuggestions}
+								scrollRef={scrollRef}
+								onScroll={updateAtBottom}
+								onScrollToBottom={scrollToBottom}
+								onOpenDoc={openDoc}
+								onRetry={retryMessage}
+								onPickHint={(hint) => {
+									if (!editor.range()) editor.focus();
+									editor.insertText(hint);
+									syncFromEditor();
+									editor.focus();
+								}}
+							/>
 
-									{visibleMessages.map((message, messageIndex) => {
-										const hasPendingTool = message.blocks.some(
-											(block) => block.type === "tool_call" && block.status === "pending",
-										);
-										const isActive = running && messageIndex === visibleMessages.length - 1;
-										const generating = message.role === "agent" && (isActive || hasPendingTool);
-										let splitAt = message.blocks.length;
-										while (splitAt > 0 && message.blocks[splitAt - 1].type === "text") splitAt -= 1;
-										const processBlocks = message.blocks.slice(0, splitAt);
-										const finalBlocks = message.blocks.slice(splitAt);
-										const hasProcessFold =
-											message.role === "agent" &&
-											processBlocks.length > 0 &&
-											finalBlocks.length > 0 &&
-											!isActive;
-										const contentBlocks = hasProcessFold ? finalBlocks : message.blocks;
-										return (
-											<article
-												key={message.id}
-												className={`omp-message ${message.role}`}
-												data-message-id={message.id}
-											>
-												<div className="omp-message-avatar">
-													{message.role === "user" ? (
-														"你"
-													) : message.role === "agent" ? (
-														<Icon name="spark" size={13} />
-													) : (
-														<Icon name="warning" size={13} />
-													)}
-												</div>
-												<div className="omp-message-body">
-													<div className="omp-message-meta">
-														<span>
-															{message.role === "user"
-																? "你"
-																: message.role === "agent"
-																	? "omp"
-																	: "系统"}
-														</span>
-														<time>
-															{new Date(message.ts).toLocaleTimeString("zh-CN", {
-																hour: "2-digit",
-																minute: "2-digit",
-															})}
-														</time>
-														{message.role === "user" && message.durationMs !== undefined && (
-															<span className="omp-duration">
-																<Icon name="check" size={11} /> 已完成{" "}
-																{formatDuration(message.durationMs)}
-															</span>
-														)}
-													</div>
-													{message.role === "agent" &&
-														(hasProcessFold ? (
-															<details className="omp-process-fold">
-																<summary className="omp-agent-status">
-																	<Icon name="check" size={11} />
-																	<span>
-																		已完成
-																		{message.durationMs !== undefined
-																			? ` ${formatDuration(message.durationMs)}`
-																			: ""}
-																	</span>
-																	<span className="omp-process-hint">查看处理过程</span>
-																	<Icon name="chevron" size={12} className="omp-fold-chevron" />
-																</summary>
-																<div className="omp-process-body">
-																	{processBlocks.map((block, blockIndex) => (
-																		<Block
-																			key={blockIndex}
-																			block={block}
-																			onOpenDoc={openDoc}
-																			query={searchText.trim()}
-																		/>
-																	))}
-																</div>
-															</details>
-														) : (
-															<div className={`omp-agent-status ${generating ? "busy" : ""}`}>
-																<Icon name={generating ? "spark" : "check"} size={11} />
-																{generating ? "生成中" : "已完成"}
-															</div>
-														))}
-													{contentBlocks.length > 0 && (
-														<div className="omp-message-content">
-															{contentBlocks.map((block, blockIndex) => (
-																<Block
-																	key={blockIndex}
-																	block={block}
-																	onOpenDoc={openDoc}
-																	query={searchText.trim()}
-																/>
-															))}
-														</div>
-													)}
-													<MessageActions
-														text={message.blocks.map((block) => block.text).join("\n")}
-														onRetry={
-															message.role === "user" ? () => retryMessage(message) : undefined
-														}
-													/>
-												</div>
-											</article>
-										);
-									})}
-
-									{running && (
-										<div className="omp-typing">
-											<span className="omp-typing-dots">
-												<i />
-												<i />
-												<i />
-											</span>
-											omp 正在处理
-										</div>
-									)}
-								</div>
-								{!atBottom && (
-									<div className="omp-scroll-bottom">
-										<button
-											type="button"
-											onClick={scrollToBottom}
-											title="回到最底部"
-											aria-label="回到最底部"
-										>
-											<Icon name="chevron" size={16} />
-										</button>
-									</div>
-								)}
-							</div>
-
-							<div className="omp-composer-wrap">
-								<div className="omp-composer">
-									{resourceSuggestOpen && (
-										<SuggestMenu
-											label="引用资源"
-											count={resourceCandidates.length}
-											empty="暂无可引用的文件/网址，可直接粘贴网址或选择本地文件"
-											entries={resourceCandidates.map((candidate) => ({
-												key: `${candidate.group}:${candidate.value}`,
-												icon:
-													candidate.group === "网址" ? (
-														<Icon name="link" size={13} />
-													) : (
-														<Icon name="file" size={13} />
-													),
-												title: candidate.label,
-												detail: `${candidate.group} · ${candidate.detail}`,
-											}))}
-											activeIndex={resourceActive}
-											onHover={setResourceActive}
-											onSelect={(index) => applyResource(resourceCandidates[index])}
-											footer={{
-												icon: "folder",
-												label: "从本地选择文件…",
-												onSelect: () => {
-													setResourceSuggestOpen(false);
-													void insertFileReference();
-												},
-											}}
-										/>
-									)}
-									{skillSuggestOpen && (
-										<SuggestMenu
-											label="技能"
-											count={skillSuggestions.length}
-											empty="没有匹配的已安装技能"
-											entries={skillSuggestions.map((skill) => ({
-												key: skill.name,
-												icon: skill.name.slice(0, 1).toUpperCase(),
-												title: skill.name,
-												detail: skill.description,
-											}))}
-											activeIndex={skillActive}
-											onHover={setSkillActive}
-											onSelect={(index) => applySkill(skillSuggestions[index].name)}
-										/>
-									)}
-									<div
-										ref={editorRef}
-										className="omp-composer-input"
-										contentEditable={connected && !running}
-										suppressContentEditableWarning
-										role="textbox"
-										aria-multiline="true"
-										aria-label="任务输入框"
-										data-placeholder={connected ? "描述任务，按 Enter 发送" : "等待连接 omp…"}
-										onInput={onEditorInput}
-										onBeforeInput={onEditorBeforeInput}
-										onKeyDown={onEditorKeyDown}
-										onMouseDown={onEditorMouseDown}
-										onCompositionStart={() => {
-											composingRef.current = true;
-										}}
-										onCompositionEnd={() => {
-											composingRef.current = false;
-											onEditorInput();
-										}}
-										onBlur={() => setSkillSuggestOpen(false)}
-									/>
-									<div className="omp-composer-footer">
-										<div className="omp-composer-hint">
-											<EntryMenu
-												open={entryMenuOpen}
-												submenu={entrySubmenu}
-												onToggleOpen={() => {
-													setEntrySubmenu(null);
-													setEntryMenuOpen((value) => !value);
-												}}
-												onChangeSubmenu={setEntrySubmenu}
-												onClose={() => {
-													setEntryMenuOpen(false);
-													setEntrySubmenu(null);
-												}}
-												menuRef={entryMenuRef}
-												currentModeName={currentModeName}
-												modes={activeState?.modes ?? null}
-												onSelectMode={(modeId) => void changeMode(modeId)}
-												skills={installedSkills}
-												onSelectSkill={applySkill}
-												onManageSkills={() => setShowSkills(true)}
-												mcpConfig={mcpConfig}
-												onInsertFile={() => void insertFileReference()}
-												onOpenResourceSuggest={openResourceSuggest}
-											/>
-											<span className="omp-path-label" title={settings.cwd}>
-												{shortPath(settings.cwd)}
-											</span>
-										</div>
-										<div className="omp-composer-tools">
-											<ApprovalMenu
-												open={approvalOpen}
-												mode={settings.approvalMode}
-												wrapRef={approvalRef}
-												onToggle={() => setApprovalOpen((value) => !value)}
-												onSelect={(mode) => void changeApprovalMode(mode)}
-											/>
-											<button
-												type="button"
-												className={`omp-model-trigger ${modelMenuOpen ? "active" : ""}`}
-												onClick={() => {
-													setOpenModelRow(null);
-													setModelMenuOpen((value) => !value);
-												}}
-												title="模型与推理档位"
-												aria-label="模型与推理档位"
-											>
-												<Icon name="spark" size={13} />
-												<span className="omp-model-label">{currentModelName || "模型"}</span>
-												<Icon name="chevron" size={12} />
-											</button>
-											<ContextPanel
-												open={contextOpen}
-												percent={contextPercent}
-												report={report}
-												shortModelName={shortModelName}
-												wrapRef={contextRef}
-												onToggle={() => {
-													const next = !contextOpen;
-													setContextOpen(next);
-													if (next && activeId) void probeContext(activeId);
-												}}
-												onClose={() => setContextOpen(false)}
-											/>
-											{running ? (
-												<button
-													type="button"
-													className="omp-send stop"
-													onClick={cancel}
-													title="停止当前任务"
-												>
-													<Icon name="stop" size={13} />
-													<span className="omp-btn-label">停止</span>
-												</button>
-											) : (
-												<button
-													type="button"
-													className="omp-send"
-													onClick={() => void send()}
-													disabled={!connected || !input.trim()}
-													title="发送"
-												>
-													<Icon name="send" size={13} />
-													<span className="omp-btn-label">发送</span>
-												</button>
-											)}
-										</div>
-									</div>
-									<ModelPanel
-										open={modelMenuOpen}
-										modelName={currentModelName}
-										modelOption={modelOption ?? null}
-										contexts={modelContexts}
-										rows={modelRows}
-										currentContext={currentContext}
-										openRowId={openModelRow}
-										onOpenRow={setOpenModelRow}
-										onSelectModel={(optionId, value) => void changeConfigOption(optionId, value)}
-										onOpenSettings={() => {
-											setModelMenuOpen(false);
-											setShowSettings(true);
-										}}
-									/>
-								</div>
-								<div className="omp-disclaimer">内容由 AI 生成，请核对重要信息</div>
-							</div>
+							<Composer
+								cwd={settings.cwd}
+								connected={connected}
+								running={running}
+								sendDisabled={!connected || !input.trim()}
+								editorRef={editorRef}
+								editorHandlers={{
+									onInput: onEditorInput,
+									onBeforeInput: onEditorBeforeInput,
+									onKeyDown: onEditorKeyDown,
+									onMouseDown: onEditorMouseDown,
+									onCompositionStart: () => {
+										composingRef.current = true;
+									},
+									onCompositionEnd: () => {
+										composingRef.current = false;
+										onEditorInput();
+									},
+									onBlur: () => setSkillSuggestOpen(false),
+								}}
+								resourceSuggest={{
+									open: resourceSuggestOpen,
+									menu: {
+										label: "引用资源",
+										count: resourceCandidates.length,
+										empty: "暂无可引用的文件/网址，可直接粘贴网址或选择本地文件",
+										entries: resourceCandidates.map((candidate) => ({
+											key: `${candidate.group}:${candidate.value}`,
+											icon:
+												candidate.group === "网址" ? (
+													<Icon name="link" size={13} />
+												) : (
+													<Icon name="file" size={13} />
+												),
+											title: candidate.label,
+											detail: `${candidate.group} · ${candidate.detail}`,
+										})),
+										activeIndex: resourceActive,
+										onHover: setResourceActive,
+										onSelect: (index) => applyResource(resourceCandidates[index]),
+										footer: {
+											icon: "folder",
+											label: "从本地选择文件…",
+											onSelect: () => {
+												setResourceSuggestOpen(false);
+												void insertFileReference();
+											},
+										},
+									},
+								}}
+								skillSuggest={{
+									open: skillSuggestOpen,
+									menu: {
+										label: "技能",
+										count: skillSuggestions.length,
+										empty: "没有匹配的已安装技能",
+										entries: skillSuggestions.map((skill) => ({
+											key: skill.name,
+											icon: skill.name.slice(0, 1).toUpperCase(),
+											title: skill.name,
+											detail: skill.description,
+										})),
+										activeIndex: skillActive,
+										onHover: setSkillActive,
+										onSelect: (index) => applySkill(skillSuggestions[index].name),
+									},
+								}}
+								entryMenu={{
+									open: entryMenuOpen,
+									submenu: entrySubmenu,
+									onToggleOpen: () => {
+										setEntrySubmenu(null);
+										setEntryMenuOpen((value) => !value);
+									},
+									onChangeSubmenu: setEntrySubmenu,
+									onClose: () => {
+										setEntryMenuOpen(false);
+										setEntrySubmenu(null);
+									},
+									menuRef: entryMenuRef,
+									currentModeName: currentModeName,
+									modes: activeState?.modes ?? null,
+									onSelectMode: (modeId) => void changeMode(modeId),
+									skills: installedSkills,
+									onSelectSkill: applySkill,
+									onManageSkills: () => setShowSkills(true),
+									mcpConfig: mcpConfig,
+									onInsertFile: () => void insertFileReference(),
+									onOpenResourceSuggest: openResourceSuggest,
+								}}
+								approval={{
+									open: approvalOpen,
+									mode: settings.approvalMode,
+									wrapRef: approvalRef,
+									onToggle: () => setApprovalOpen((value) => !value),
+									onSelect: (mode) => void changeApprovalMode(mode),
+								}}
+								context={{
+									open: contextOpen,
+									percent: contextPercent,
+									report: report,
+									shortModelName: shortModelName,
+									wrapRef: contextRef,
+									onToggle: () => {
+										const next = !contextOpen;
+										setContextOpen(next);
+										if (next && activeId) void probeContext(activeId);
+									},
+									onClose: () => setContextOpen(false),
+								}}
+								modelTrigger={{
+									name: currentModelName,
+									open: modelMenuOpen,
+									onToggle: () => {
+										setOpenModelRow(null);
+										setModelMenuOpen((value) => !value);
+									},
+								}}
+								modelPanel={{
+									open: modelMenuOpen,
+									modelName: currentModelName,
+									modelOption: modelOption ?? null,
+									contexts: modelContexts,
+									rows: modelRows,
+									currentContext: currentContext,
+									openRowId: openModelRow,
+									onOpenRow: setOpenModelRow,
+									onSelectModel: (optionId, value) => void changeConfigOption(optionId, value),
+									onOpenSettings: () => {
+										setModelMenuOpen(false);
+										setShowSettings(true);
+									},
+								}}
+								onSend={() => void send()}
+								onCancel={cancel}
+							/>
 						</section>
 
 						{showPreview && (

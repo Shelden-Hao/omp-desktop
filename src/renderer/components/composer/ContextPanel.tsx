@@ -9,7 +9,7 @@ import { formatContext, formatTokens } from "../../core/format";
 import { Icon } from "../common/Icon";
 import { ContextMeter, ContextRing } from "../chat/ContextMeter";
 
-interface ContextPanelProps {
+export interface ContextPanelProps {
 	open: boolean;
 	percent: number;
 	report: ContextReport | undefined;
