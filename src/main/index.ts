@@ -23,7 +23,13 @@ interface AppSettings {
 	bunPath: string;
 	cwd: string;
 	theme: "light" | "dark" | "system";
+	/** 透传给 omp 的 --approval-mode，切换后需要重启 ACP 子进程才生效 */
+	approvalMode: ApprovalMode;
 }
+
+type ApprovalMode = "always-ask" | "always-ask-cached" | "write" | "yolo";
+
+const APPROVAL_MODES: ApprovalMode[] = ["always-ask", "always-ask-cached", "write", "yolo"];
 
 interface TextDocument {
 	path: string;
@@ -396,6 +402,8 @@ function defaultSettings(): AppSettings {
 		bunPath: findBun(home, npmGlobal),
 		cwd: join(home, "Desktop"),
 		theme: "system",
+		// omp 自身默认就是 yolo（全部自动批准），保持与 CLI 一致
+		approvalMode: "yolo",
 	};
 }
 
@@ -407,6 +415,10 @@ function loadSettings(): AppSettings {
 			// 旧配置里的路径若已失效，回退到自动探测值，避免开箱连不上。
 			if (saved.bunPath && !existsSync(saved.bunPath)) saved.bunPath = defaults.bunPath;
 			if (saved.ompCliPath && !existsSync(saved.ompCliPath)) saved.ompCliPath = defaults.ompCliPath;
+			// 旧版本配置文件里没有 approvalMode，或写了非法值时回退默认档位
+			if (!saved.approvalMode || !APPROVAL_MODES.includes(saved.approvalMode)) {
+				saved.approvalMode = defaults.approvalMode;
+			}
 			return { ...defaults, ...saved };
 		}
 	} catch {
@@ -480,11 +492,15 @@ function startAgent(): { ok: boolean; error?: string } {
 	}
 
 	try {
-		agent = spawn(settings.bunPath, [settings.ompCliPath, "acp"], {
-			cwd: settings.cwd,
-			stdio: ["pipe", "pipe", "pipe"],
-			windowsHide: true,
-		});
+		agent = spawn(
+			settings.bunPath,
+			[settings.ompCliPath, "acp", `--approval-mode=${settings.approvalMode}`],
+			{
+				cwd: settings.cwd,
+				stdio: ["pipe", "pipe", "pipe"],
+				windowsHide: true,
+			},
+		);
 	} catch (e) {
 		return { ok: false, error: `启动 omp 失败：${(e as Error).message}` };
 	}

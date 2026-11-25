@@ -6,11 +6,37 @@
 
 export type ThemeMode = "light" | "dark" | "system";
 
+/**
+ * omp 的工具审批档位，对应 `tools.approvalMode` / `--approval-mode`：
+ * - always-ask 只自动批准只读工具，其它都要确认
+ * - always-ask-cached 连文件读取也要确认，确认后可记住该文件/目录
+ * - write 自动批准读取与工作区写入，其它仍需确认
+ * - yolo 全部自动批准
+ */
+export type ApprovalMode = "always-ask" | "always-ask-cached" | "write" | "yolo";
+
 export interface DesktopSettings {
   ompCliPath: string;
   bunPath: string;
   cwd: string;
   theme: ThemeMode;
+  approvalMode: ApprovalMode;
+}
+
+/** `/context` 命令解析结果，全部来自 omp 真实统计 */
+export interface ContextPart {
+  key: string;
+  label: string;
+  tokens: number;
+  percent: number;
+}
+
+export interface ContextReport {
+  contextWindow: number;
+  percent: number;
+  usedTokens: number;
+  parts: ContextPart[];
+  reservedTokens: number;
 }
 
 export interface StoredSession {

@@ -1524,6 +1524,236 @@ details[open] > summary .omp-fold-chevron {
   color: var(--accent);
 }
 
+/* ---------- 安全等级 ---------- */
+.omp-approval-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.omp-approval-trigger {
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+.omp-approval-trigger:hover,
+.omp-approval-trigger.active {
+  border-color: var(--accent-ring);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.omp-approval-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 45;
+  width: 268px;
+  padding: 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 11px;
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-lg);
+}
+.omp-approval-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+.omp-approval-item:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+.omp-approval-item.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.omp-approval-item-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--font-md);
+  font-weight: 550;
+}
+.omp-approval-item-hint {
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+  line-height: 1.35;
+}
+
+/* ---------- 上下文用量 ---------- */
+.omp-context-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.omp-context-trigger {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+  color: var(--accent);
+  cursor: pointer;
+}
+.omp-context-trigger:hover,
+.omp-context-trigger.active {
+  border-color: var(--accent-ring);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.omp-context-trigger.warn {
+  color: var(--warning);
+}
+.omp-context-trigger.danger {
+  color: var(--danger);
+}
+.omp-context-ring {
+  display: block;
+}
+.omp-context-track {
+  stroke: var(--border-strong);
+}
+.omp-context-progress {
+  stroke: currentColor;
+  transition: stroke-dasharray 240ms ease;
+}
+.omp-context-panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  z-index: 45;
+  width: 312px;
+  padding: var(--space-4);
+  border: 1px solid var(--border-strong);
+  border-radius: 13px;
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-lg);
+}
+.omp-context-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-primary);
+  font-size: var(--font-md);
+  font-weight: 600;
+}
+.omp-context-close {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.omp-context-close:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+.omp-context-total {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 10px 0 12px;
+  min-width: 0;
+}
+.omp-context-total strong {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  line-height: 1;
+}
+.omp-context-total span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+.omp-context-bar {
+  display: flex;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-subtle);
+}
+.omp-context-seg {
+  display: block;
+  height: 100%;
+}
+.omp-context-seg.reserved {
+  background: var(--border-strong);
+}
+.omp-context-seg.free {
+  background: transparent;
+}
+.omp-context-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.omp-context-legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-sm);
+  color: var(--text-primary);
+}
+.omp-context-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+}
+.omp-context-dot.reserved {
+  background: var(--border-strong);
+}
+.omp-context-legend-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.omp-context-legend-value {
+  flex: none;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.omp-context-foot {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  text-align: center;
+}
+
 /* ---------- 模型设置面板 ---------- */
 .omp-model-panel {
   position: absolute;

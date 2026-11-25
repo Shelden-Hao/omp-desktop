@@ -2,8 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	AcpClient,
 	type AcpEvent,
+	type ApprovalMode,
 	type ChatMessage,
 	type ContentBlock,
+	type ContextPart,
+	type ContextReport,
 	type DesktopSettings,
 	type ThemeMode,
 	type SessionState,
@@ -76,7 +79,8 @@ type IconName =
 	| "minimize"
 	| "maximize"
 	| "sidebar"
-	| "filter";
+	| "filter"
+	| "shield";
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -149,6 +153,90 @@ function formatContext(tokens: number) {
 		return `${Number.isInteger(millions) ? millions : millions.toFixed(1)}M`;
 	}
 	return `${Math.round(tokens / 1000)}K`;
+}
+
+/** 精确到 0.1K 的 token 展示，用于「已使用 191.4K」这类文案 */
+function formatTokens(tokens: number) {
+	if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
+	if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}K`;
+	return String(Math.round(tokens));
+}
+
+const APPROVAL_LABEL: Record<ApprovalMode, string> = {
+	yolo: "完全允许",
+	write: "仅写入确认",
+	"always-ask-cached": "询问并记住",
+	"always-ask": "每次询问",
+};
+
+const APPROVAL_HINT: Record<ApprovalMode, string> = {
+	yolo: "所有工具调用直接执行，不再确认",
+	write: "读取自动通过，写文件与执行命令前确认",
+	"always-ask-cached": "文件读取也需要确认，确认后可记住该路径",
+	"always-ask": "仅只读工具自动通过，其它每次都要确认",
+};
+
+const APPROVAL_OPTIONS: ApprovalMode[] = ["yolo", "write", "always-ask-cached", "always-ask"];
+
+/** omp `/context` 输出里的分段名称 → 中文 */
+const CONTEXT_PART_LABEL: Record<string, string> = {
+	"system prompt": "系统提示词",
+	"system tools": "工具",
+	"system context": "系统上下文",
+	"instruction files": "指令文件",
+	skills: "技能",
+	messages: "对话消息",
+	"tool output": "工具输出",
+	"auto-compact buf": "自动压缩预留",
+	free: "空闲",
+};
+
+/** 分段条配色，按出现顺序取用；与图例圆点共用 */
+const CONTEXT_PART_COLORS = ["#6d5efc", "#12b981", "#f59e0b", "#8b5cf6", "#ec4899", "#0ea5e9"];
+
+/**
+ * 解析 omp `/context` 的纯文本输出，例如：
+ *   Context window: 1032192 tokens (16% used)
+ *     System prompt    [░░░] 0%  1731 tokens
+ * 官方没有提供结构化字段，这里只做格式解析，数值全部来自 omp 自身统计。
+ */
+function parseContextReport(text: string): ContextReport | null {
+	if (!text.includes("Context window")) return null;
+	const windowMatch = text.match(/Context window:\s*([\d,]+)\s*tokens/i);
+	if (!windowMatch) return null;
+	const contextWindow = Number(windowMatch[1].replace(/,/g, ""));
+	if (!contextWindow) return null;
+
+	const parts: ContextPart[] = [];
+	let reservedTokens = 0;
+	for (const line of text.split("\n")) {
+		const match = line.match(/^\s+(.+?)\s+\[[^\]]*\]\s*\d+%\s+([\d,]+)\s+tokens\s*$/);
+		if (!match) continue;
+		const rawName = match[1].trim();
+		const key = rawName.toLowerCase();
+		const tokens = Number(match[2].replace(/,/g, ""));
+		if (key === "free") continue;
+		if (key === "auto-compact buf") {
+			reservedTokens = tokens;
+			continue;
+		}
+		parts.push({
+			key,
+			label: CONTEXT_PART_LABEL[key] || rawName,
+			tokens,
+			percent: (tokens / contextWindow) * 100,
+		});
+	}
+	if (!parts.length) return null;
+
+	const usedTokens = parts.reduce((sum, part) => sum + part.tokens, 0);
+	return {
+		contextWindow,
+		usedTokens,
+		percent: (usedTokens / contextWindow) * 100,
+		parts,
+		reservedTokens,
+	};
 }
 
 interface ModelRowOption {
@@ -308,6 +396,12 @@ function Icon({
 			return (
 				<svg {...common}>
 					<path d="M4 5h16l-6 7.6V19l-4-2.4v-4L4 5Z" />
+				</svg>
+			);
+		case "shield":
+			return (
+				<svg {...common}>
+					<path d="M12 3.2 5 6v5.4c0 4.3 2.9 7.4 7 9.4 4.1-2 7-5.1 7-9.4V6l-7-2.8Z" />
 				</svg>
 			);
 		case "refresh":
@@ -773,6 +867,104 @@ function Block({
 	return <Markdown text={block.text} onOpen={onOpenDoc} query={query} />;
 }
 
+/** 底部圆环：外层是上下文窗口，内层弧线是已用比例 */
+function ContextRing({ percent, size = 17 }: { percent: number; size?: number }) {
+	const clamped = Math.max(0, Math.min(100, percent));
+	const stroke = 2.4;
+	const center = size / 2;
+	const radius = center - stroke / 2;
+	const circumference = 2 * Math.PI * radius;
+	const filled = (clamped / 100) * circumference;
+	return (
+		<svg
+			width={size}
+			height={size}
+			viewBox={`0 0 ${size} ${size}`}
+			className="omp-context-ring"
+			aria-hidden="true"
+		>
+			<circle
+				className="omp-context-track"
+				cx={center}
+				cy={center}
+				r={radius}
+				fill="none"
+				strokeWidth={stroke}
+			/>
+			{clamped > 0 && (
+				<circle
+					className="omp-context-progress"
+					cx={center}
+					cy={center}
+					r={radius}
+					fill="none"
+					strokeWidth={stroke}
+					strokeLinecap="round"
+					strokeDasharray={`${filled} ${circumference - filled}`}
+					transform={`rotate(-90 ${center} ${center})`}
+				/>
+			)}
+		</svg>
+	);
+}
+
+/** 上下文分段条 + 图例，数值全部来自 omp `/context` */
+function ContextMeter({ report }: { report: ContextReport }) {
+	const parts: Array<ContextPart & { color: string }> = report.parts.map((part, index) => ({
+		...part,
+		color: CONTEXT_PART_COLORS[index % CONTEXT_PART_COLORS.length],
+	}));
+	const reservedPercent = (report.reservedTokens / report.contextWindow) * 100;
+	const freePercent = Math.max(
+		0,
+		100 - parts.reduce((sum, part) => sum + part.percent, 0) - reservedPercent,
+	);
+	// 占比过小的分类在分段条上会挤成杂色碎条，只保留图例
+	const barParts = parts.filter((part) => part.percent >= 0.3);
+	const formatPercent = (value: number) =>
+		value > 0 && value < 0.1 ? "<0.1%" : `${value.toFixed(1)}%`;
+	return (
+		<>
+			<div className="omp-context-bar">
+				{barParts.map((part) => (
+					<span
+						key={part.key}
+						className="omp-context-seg"
+						style={{ width: `${part.percent}%`, background: part.color }}
+						title={`${part.label} ${formatTokens(part.tokens)}`}
+					/>
+				))}
+				{reservedPercent > 0 && (
+					<span
+						className="omp-context-seg reserved"
+						style={{ width: `${reservedPercent}%` }}
+						title={`自动压缩预留 ${formatTokens(report.reservedTokens)}`}
+					/>
+				)}
+				{freePercent > 0 && (
+					<span className="omp-context-seg free" style={{ width: `${freePercent}%` }} />
+				)}
+			</div>
+			<ul className="omp-context-legend">
+				{parts.map((part) => (
+					<li key={part.key}>
+						<span className="omp-context-dot" style={{ background: part.color }} />
+						<span className="omp-context-legend-label">{part.label}</span>
+						<span className="omp-context-legend-value">{formatPercent(part.percent)}</span>
+					</li>
+				))}
+				{report.reservedTokens > 0 && (
+					<li>
+						<span className="omp-context-dot reserved" />
+						<span className="omp-context-legend-label">自动压缩预留</span>
+						<span className="omp-context-legend-value">{formatPercent(reservedPercent)}</span>
+					</li>
+				)}
+			</ul>
+		</>
+	);
+}
+
 export function App() {
 	const [client, setClient] = useState<AcpClient | null>(null);
 	const [sessions, setSessions] = useState<Session[]>([]);
@@ -789,6 +981,7 @@ export function App() {
 		bunPath: "",
 		cwd: "",
 		theme: "system",
+		approvalMode: "yolo",
 	});
 	const [permission, setPermission] = useState<PermissionState | null>(null);
 	const [docs, setDocs] = useState<DocFile[]>(DEFAULT_DOCS);
@@ -808,11 +1001,16 @@ export function App() {
 	const [modelMenuOpen, setModelMenuOpen] = useState(false);
 	const [modelContexts, setModelContexts] = useState<Record<string, number>>({});
 	const [openModelRow, setOpenModelRow] = useState<string | null>(null);
+	const [approvalOpen, setApprovalOpen] = useState(false);
+	const [agentEpoch, setAgentEpoch] = useState(0);
+	const [contextOpen, setContextOpen] = useState(false);
+	const [contextReports, setContextReports] = useState<Record<string, ContextReport>>({});
 
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const inputRef = useRef<HTMLTextAreaElement>(null);
 	const searchInputRef = useRef<HTMLInputElement>(null);
 	const filterRef = useRef<HTMLSpanElement>(null);
+	const clientRef = useRef<AcpClient | null>(null);
 	const toolIndex = useRef<Map<string, number>>(new Map());
 	const activeIdRef = useRef<string | null>(null);
 	const loadedSessions = useRef<Set<string>>(new Set());
@@ -820,6 +1018,11 @@ export function App() {
 	const cancelledSessionRef = useRef<string | null>(null);
 	const runningRef = useRef(false);
 	const atBottomRef = useRef(true);
+	/** 正在静默采集 `/context` 输出时指向该会话，期间的 chunk 不进对话 */
+	const silentContextRef = useRef<{ sessionId: string; text: string } | null>(null);
+	const contextBusyRef = useRef(false);
+	const approvalRef = useRef<HTMLSpanElement>(null);
+	const contextRef = useRef<HTMLSpanElement>(null);
 
 	const messages = useMemo(
 		() => (activeId ? messagesBySession[activeId] || [] : []),
@@ -828,6 +1031,8 @@ export function App() {
 	const visibleMessages = messages;
 	const currentDoc = docs.find((doc) => doc.key === activeDoc);
 	const filtersActive = statusFilter !== "all" || timeFilter !== "all";
+	const report = activeId ? contextReports[activeId] : undefined;
+	const contextPercent = report ? Math.min(100, Math.max(0, report.percent)) : 0;
 
 	// omp 不返回任务状态，这里按本地会话数据推导，避免展示没有依据的状态
 	const filteredSessions = useMemo(() => {
@@ -876,6 +1081,27 @@ export function App() {
 			document.removeEventListener("keydown", onKeyDown);
 		};
 	}, [filterOpen]);
+
+	// 安全等级下拉与上下文面板：点击外部或 Esc 关闭
+	useEffect(() => {
+		if (!approvalOpen && !contextOpen) return;
+		const onPointerDown = (event: MouseEvent) => {
+			const target = event.target as Node;
+			if (approvalOpen && !approvalRef.current?.contains(target)) setApprovalOpen(false);
+			if (contextOpen && !contextRef.current?.contains(target)) setContextOpen(false);
+		};
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key !== "Escape") return;
+			setApprovalOpen(false);
+			setContextOpen(false);
+		};
+		document.addEventListener("mousedown", onPointerDown);
+		document.addEventListener("keydown", onKeyDown);
+		return () => {
+			document.removeEventListener("mousedown", onPointerDown);
+			document.removeEventListener("keydown", onKeyDown);
+		};
+	}, [approvalOpen, contextOpen]);
 
 	// 模型面板打开时刷新一次容量信息（用户可能刚在设置里加过自定义模型）
 	useEffect(() => {
@@ -1120,6 +1346,30 @@ export function App() {
 		}
 	}, []);
 
+	/**
+	 * 向当前会话静默发送 `/context`，解析出真实的分段用量。
+	 * 命令在 omp 侧是本地执行的，不产生模型请求也不写进 transcript，
+	 * 因此可以随时刷新，不会污染对话。
+	 */
+	const probeContext = useCallback(async (sessionId: string, target?: AcpClient | null) => {
+		const acp = target ?? clientRef.current;
+		if (!acp || runningRef.current || contextBusyRef.current) return;
+		if (silentContextRef.current) return;
+		const box = { sessionId, text: "" };
+		silentContextRef.current = box;
+		contextBusyRef.current = true;
+		try {
+			await acp.prompt(sessionId, "/context");
+		} catch {
+			// 旧版 omp 没有 /context 命令时静默失败，面板退化到只显示总量
+		} finally {
+			if (silentContextRef.current === box) silentContextRef.current = null;
+			contextBusyRef.current = false;
+		}
+		const report = parseContextReport(box.text);
+		if (report) setContextReports((prev) => ({ ...prev, [sessionId]: report }));
+	}, []);
+
 	const loadSessionHistory = useCallback(async (acp: AcpClient, sessionId: string, cwd: string) => {
 		if (loadedSessions.current.has(sessionId)) return;
 		loadedSessions.current.add(sessionId);
@@ -1169,12 +1419,43 @@ export function App() {
 					return;
 				}
 
+				if (kind === "usage_update") {
+					// omp 每次请求结束推送一次，只有总量，没有分项；分项走 /context 解析
+					const size = Number(update.size) || 0;
+					const used = Number(update.used) || 0;
+					setContextReports((prev) => {
+						const current = prev[sessionId];
+						if (current) {
+							if (!size || size === current.contextWindow) return prev;
+							return { ...prev, [sessionId]: { ...current, contextWindow: size } };
+						}
+						if (!size) return prev;
+						return {
+							...prev,
+							[sessionId]: {
+								contextWindow: size,
+								usedTokens: used,
+								percent: (used / size) * 100,
+								parts: [],
+								reservedTokens: 0,
+							},
+						};
+					});
+					return;
+				}
+
 				const content = update.content as { text?: string } | undefined;
 
 				if (kind === "user_message_chunk" && content?.text) {
 					// 历史回放会带用户消息；实时 prompt 的用户气泡已本地插入，忽略回声。
 					if (!runningRef.current) appendUserChunk(sessionId, content.text);
 				} else if (kind === "agent_message_chunk" && content?.text) {
+					// /context 是本地命令，输出只用于解析，不写进对话
+					const silent = silentContextRef.current;
+					if (silent && silent.sessionId === sessionId) {
+						silent.text += content.text;
+						return;
+					}
 					appendBlock(sessionId, { type: "text", text: content.text });
 				} else if (kind === "agent_thought_chunk" && content?.text) {
 					appendBlock(sessionId, { type: "thinking", text: content.text });
@@ -1305,7 +1586,10 @@ export function App() {
 
 		const acp = new AcpClient(bridge);
 		acp.onEvent(handleEvent);
+		clientRef.current = acp;
 		setClient(acp);
+		// 进程重启后会话需要重新 load，历史也要重新回放
+		loadedSessions.current.clear();
 
 		(async () => {
 			const started = await acp.start();
@@ -1353,18 +1637,21 @@ export function App() {
 
 				setSessions(list);
 				void persistSessions(list);
-				const first = list[0];
+				// 切换安全等级会重启进程，优先回到用户原先正在看的会话
+				const previous = activeIdRef.current;
+				const first = (previous && list.find((item) => item.id === previous)) || list[0];
 				setActiveId(first.id);
 				setConnected(true);
 				setStatus("已连接");
 				await loadSessionHistory(acp, first.id, first.cwd || loaded.cwd);
+				void probeContext(first.id, acp);
 			} catch (error) {
 				setStatus(`握手失败：${(error as Error).message}`);
 			}
 		})();
 
 		return () => acp.stop();
-	}, [handleEvent, loadSessionHistory, persistSessions]);
+	}, [agentEpoch, handleEvent, loadSessionHistory, persistSessions, probeContext]);
 
 	useEffect(() => {
 		if (!atBottomRef.current) return;
@@ -1373,7 +1660,8 @@ export function App() {
 
 	const send = async (override?: string) => {
 		const text = (override ?? input).trim();
-		if (!client || !activeId || !text || running) return;
+		// 正在刷新上下文用量时先让出，避免两个 prompt 并发打到同一会话
+		if (!client || !activeId || !text || running || contextBusyRef.current) return;
 		const sessionId = activeId;
 		const startedAt = Date.now();
 		const userMessageId = uid();
@@ -1420,6 +1708,8 @@ export function App() {
 			runningRef.current = false;
 			setRunning(false);
 			inputRef.current?.focus();
+			// 一轮结束后刷新上下文占用（工具输出、消息都会变化）
+			void probeContext(sessionId);
 		}
 	};
 
@@ -1451,7 +1741,28 @@ export function App() {
 		if (client && !loadedSessions.current.has(session.id)) {
 			const loaded = await window.desktop.settings.get();
 			await loadSessionHistory(client, session.id, session.cwd || loaded.cwd);
+			void probeContext(session.id, client);
 		}
+	};
+
+	/** 切换安全等级：omp 只接受启动参数，因此要重启 ACP 进程并恢复当前会话 */
+	const changeApprovalMode = async (mode: ApprovalMode) => {
+		setApprovalOpen(false);
+		if (mode === settings.approvalMode) return;
+		if (running) {
+			setStatus("任务运行中，结束后再切换安全等级");
+			return;
+		}
+		setSettings((prev) => ({ ...prev, approvalMode: mode }));
+		try {
+			await window.desktop.settings.set({ approvalMode: mode });
+		} catch (error) {
+			setStatus(`安全等级保存失败：${(error as Error).message}`);
+			return;
+		}
+		setStatus(`安全等级已切换为「${APPROVAL_LABEL[mode]}」，正在重连 omp…`);
+		setConnected(false);
+		setAgentEpoch((value) => value + 1);
 	};
 
 	const newSession = async () => {
@@ -1620,6 +1931,9 @@ export function App() {
 	const currentModelName =
 		modelOption?.options?.find((item) => item.value === modelOption.currentValue)?.name ||
 		modelOption?.currentValue;
+	/** ACP 返回的模型名形如「kcoder-glm-flash · GLM-5.3-Flash」，底部只留型号 */
+	const shortModelName =
+		(currentModelName || "").split("·").pop()?.trim() || currentModelName || "";
 
 	// 模型详情面板的配置行：只列 omp 真实提供的能力
 	const modelRows: ModelRow[] = [];
@@ -2226,6 +2540,47 @@ export function App() {
 											<span title={settings.cwd}>{shortPath(settings.cwd)}</span>
 										</div>
 										<div className="omp-composer-tools">
+											<span className="omp-approval-wrap" ref={approvalRef}>
+												<button
+													type="button"
+													className={`omp-approval-trigger ${approvalOpen ? "active" : ""}`}
+													onClick={() => setApprovalOpen((value) => !value)}
+													title={`安全等级：${APPROVAL_LABEL[settings.approvalMode]}`}
+													aria-label="安全等级"
+													aria-haspopup="menu"
+													aria-expanded={approvalOpen}
+												>
+													<Icon name="shield" size={13} />
+													<span>{APPROVAL_LABEL[settings.approvalMode]}</span>
+													<Icon name="chevron" size={12} />
+												</button>
+												{approvalOpen && (
+													<div className="omp-approval-menu" role="menu" aria-label="安全等级">
+														{APPROVAL_OPTIONS.map((mode) => (
+															<button
+																key={mode}
+																type="button"
+																role="menuitemradio"
+																aria-checked={settings.approvalMode === mode}
+																className={`omp-approval-item ${
+																	settings.approvalMode === mode ? "active" : ""
+																}`}
+																onClick={() => void changeApprovalMode(mode)}
+															>
+																<span className="omp-approval-item-main">
+																	<span>{APPROVAL_LABEL[mode]}</span>
+																	{settings.approvalMode === mode && (
+																		<Icon name="check" size={13} />
+																	)}
+																</span>
+																<span className="omp-approval-item-hint">
+																	{APPROVAL_HINT[mode]}
+																</span>
+															</button>
+														))}
+													</div>
+												)}
+											</span>
 											<button
 												type="button"
 												className={`omp-model-trigger ${modelMenuOpen ? "active" : ""}`}
@@ -2240,6 +2595,55 @@ export function App() {
 												<span>{currentModelName || "模型"}</span>
 												<Icon name="chevron" size={12} />
 											</button>
+											<span className="omp-context-wrap" ref={contextRef}>
+												<button
+													type="button"
+													className={`omp-context-trigger ${contextOpen ? "active" : ""} ${
+														contextPercent >= 85 ? "danger" : contextPercent >= 60 ? "warn" : ""
+													}`}
+													onClick={() => {
+														const next = !contextOpen;
+														setContextOpen(next);
+														if (next && activeId) void probeContext(activeId);
+													}}
+													title={
+														report ? `上下文已用 ${report.percent.toFixed(1)}%` : "查看上下文用量"
+													}
+													aria-label="上下文用量"
+												>
+													<ContextRing percent={contextPercent} />
+												</button>
+												{contextOpen && (
+													<div className="omp-context-panel" role="dialog" aria-label="上下文用量">
+														<div className="omp-context-head">
+															<span>上下文用量</span>
+															<button
+																type="button"
+																className="omp-context-close"
+																onClick={() => setContextOpen(false)}
+																aria-label="关闭"
+															>
+																<Icon name="close" size={13} />
+															</button>
+														</div>
+														<div className="omp-context-total">
+															<strong>{report ? `${report.percent.toFixed(1)}%` : "—"}</strong>
+															<span>
+																{report
+																	? `已使用 ${formatTokens(report.usedTokens)} / ${formatContext(report.contextWindow)}`
+																	: "正在读取 omp 上下文统计…"}
+															</span>
+														</div>
+														{report && <ContextMeter report={report} />}
+														<div className="omp-context-foot">
+															{report
+																? `${formatContext(report.contextWindow)} 上下文`
+																: "上下文窗口未知"}
+															{shortModelName ? ` · ${shortModelName}` : ""}
+														</div>
+													</div>
+												)}
+											</span>
 											{running ? (
 												<button
 													type="button"
