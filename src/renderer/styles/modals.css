@@ -1,0 +1,161 @@
+/* ---------- 弹窗 ---------- */
+.omp-modal-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: var(--space-6);
+  background: rgba(12, 17, 28, 0.46);
+  backdrop-filter: blur(3px);
+}
+.omp-modal {
+  width: min(460px, 100%);
+  padding: var(--space-6);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-lg);
+}
+.omp-modal.settings {
+  width: min(520px, 100%);
+}
+.omp-modal-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  margin-bottom: var(--space-3);
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.omp-modal-icon.warning {
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
+  color: var(--warning);
+}
+.omp-modal h3 {
+  margin: 0 0 var(--space-2);
+  font-size: 17px;
+}
+.omp-modal p {
+  margin: 0 0 var(--space-4);
+  color: var(--text-secondary);
+  font-size: var(--font-md);
+}
+.omp-permission-title {
+  max-height: 180px;
+  overflow: auto;
+  margin-bottom: var(--space-5);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-code);
+  color: var(--text-secondary);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: var(--font-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.omp-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+.omp-modal-actions button {
+  height: 32px;
+  padding: 0 15px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--font-md);
+  font-weight: 600;
+}
+.omp-modal-actions .primary {
+  background: var(--accent);
+  color: #fff;
+}
+.omp-modal-actions .primary:hover {
+  background: var(--accent-hover);
+}
+.omp-modal-actions .secondary {
+  border-color: var(--border-strong);
+  background: var(--surface-panel);
+  color: var(--text-secondary);
+}
+.omp-modal-actions .secondary:hover {
+  background: var(--surface-hover);
+}
+
+.omp-modal.settings label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: var(--space-3);
+}
+.omp-modal.settings label > span,
+.omp-settings-theme > span {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+.omp-modal.settings input {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-input);
+  color: var(--text-primary);
+  font-size: var(--font-md);
+}
+.omp-settings-theme {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.omp-settings-theme .omp-theme-switch button {
+  height: 28px;
+}
+
+/* ---------- 日志 ---------- */
+.omp-logs {
+  position: fixed;
+  left: 232px;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  max-height: 120px;
+  overflow: auto;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-panel);
+  font-size: var(--font-sm);
+}
+.omp-logs summary {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px var(--space-4);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.omp-logs pre {
+  margin: 0;
+  padding: 0 var(--space-4) var(--space-2);
+  color: var(--danger);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+@media (max-width: 1180px) {
+  .omp-preview {
+    width: clamp(300px, 38vw, 400px);
+  }
+  .omp-title-session {
+    flex-basis: 180px;
+  }
+}
+
+@media (max-width: 960px) {
+  .omp-preview {
+    display: none;
+  }
+}

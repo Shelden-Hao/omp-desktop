@@ -1,0 +1,289 @@
+/* ---------- 输入区 ---------- */
+.omp-composer-wrap {
+  flex: none;
+  padding: 0 clamp(var(--space-6), 6vw, var(--space-8)) var(--space-3);
+  background: linear-gradient(to top, var(--surface-app) 70%, transparent);
+}
+.omp-composer {
+  position: relative;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: var(--space-3) var(--space-4) var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-input);
+  box-shadow: var(--shadow-md);
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+.omp-composer:focus-within {
+  /* 聚焦只保持中性边框与轻阴影，不要彩色光环 */
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+/* 输入区是非受控 contenteditable：chip 作为 inline 元素进入文本流，
+   文字从 chip 后面接着排，换行后回到容器左侧，而不是被 chip 挤进右侧窄列。 */
+.omp-composer-input {
+  width: 100%;
+  min-height: 24px;
+  max-height: 160px;
+  overflow-y: auto;
+  padding: 0;
+  outline: 0;
+  color: var(--text-primary);
+  font-size: var(--font-lg);
+  line-height: 24px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  caret-color: var(--accent);
+}
+.omp-composer-input:empty::before {
+  content: attr(data-placeholder);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.omp-composer-input[contenteditable="false"] {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+.omp-skill-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 21px;
+  margin: 0 1px;
+  padding: 0 7px 0 3px;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border-subtle));
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+  font-size: var(--font-md);
+  font-weight: 600;
+  line-height: 19px;
+  /* inline 流里让 chip 中线对齐文字中线，天然同基线 */
+  vertical-align: middle;
+  white-space: nowrap;
+  user-select: none;
+}
+/* 资源 chip 与技能 chip 同一行框，仅配色区分（文件/网址用中性色） */
+.omp-resource-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 21px;
+  margin: 0 1px;
+  padding: 0 7px 0 3px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  font-size: var(--font-md);
+  font-weight: 600;
+  line-height: 19px;
+  vertical-align: middle;
+  white-space: nowrap;
+  user-select: none;
+}
+.omp-resource-chip .omp-skill-chip-remove {
+  background: color-mix(in srgb, var(--text-muted) 18%, transparent);
+}
+.omp-skill-chip-remove {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: inherit;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.omp-skill-chip-remove:hover {
+  background: var(--accent);
+  color: var(--surface-panel);
+}
+.omp-skill-suggest {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 30;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-lg);
+}
+.omp-skill-suggest-head {
+  padding: 4px var(--space-2) var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 600;
+}
+.omp-skill-suggest-empty {
+  padding: var(--space-4);
+  color: var(--text-muted);
+  font-size: var(--font-md);
+  text-align: center;
+}
+.omp-skill-suggest-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.omp-skill-suggest-item:hover,
+.omp-skill-suggest-item.active {
+  background: var(--surface-hover);
+}
+.omp-skill-suggest-icon {
+  display: grid;
+  flex: 0 0 26px;
+  place-items: center;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--font-sm);
+  font-weight: 700;
+}
+.omp-skill-suggest-main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.omp-skill-suggest-main strong {
+  flex: none;
+  color: var(--text-primary);
+  font-size: var(--font-md);
+  font-weight: 600;
+}
+.omp-skill-suggest-main > span {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.omp-skill-suggest-action {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  margin-top: var(--space-1);
+  padding: var(--space-2);
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-md);
+  text-align: left;
+  cursor: pointer;
+}
+.omp-skill-suggest-action:hover {
+  color: var(--accent-hover);
+}
+.omp-composer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+/* 底栏按钮永远不被 flex 压成多行：文字换行是窄窗口溢出的根源 */
+.omp-composer-footer button {
+  flex: none;
+  white-space: nowrap;
+}
+.omp-composer-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+.omp-reference {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+.omp-reference:hover,
+.omp-reference.active {
+  border-color: var(--border-subtle);
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+/* 路径标签才需要截断；入口 span 必须允许菜单浮层溢出 */
+.omp-composer-hint > span:not(.omp-entry-wrap) {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.omp-composer-hint > .omp-entry-wrap {
+  overflow: visible;
+}
+.omp-hint-tag {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+}
+.omp-composer-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.omp-model-trigger {
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+.omp-model-trigger span {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.omp-model-trigger:hover,
+.omp-model-trigger.active {
+  border-color: var(--accent-ring);
+  background: var(--accent-soft);
+  color: var(--accent);
+}

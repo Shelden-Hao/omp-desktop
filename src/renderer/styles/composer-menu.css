@@ -1,0 +1,154 @@
+/* 窄窗口参考 ChatGPT 输入栏：次要标签收起为图标，模型名截断但保留，发送按钮绝不换行 */
+@media (max-width: 640px) {
+  .omp-composer-wrap {
+    padding: 0 10px 10px;
+  }
+  .omp-composer {
+    padding: 10px 10px 8px;
+  }
+  .omp-composer-footer {
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .omp-composer-hint,
+  .omp-composer-tools {
+    gap: 4px;
+    min-width: 0;
+  }
+  .omp-composer-hint .omp-btn-label,
+  .omp-composer-hint .omp-mode-label,
+  .omp-composer-hint .omp-path-label,
+  .omp-approval-trigger .omp-btn-label,
+  .omp-send .omp-btn-label {
+    display: none;
+  }
+  .omp-send {
+    width: 34px;
+    justify-content: center;
+    padding: 0;
+  }
+  .omp-reference,
+  .omp-approval-trigger {
+    padding: 5px 7px;
+  }
+  .omp-model-trigger {
+    gap: 4px;
+    padding: 0 6px;
+  }
+  .omp-model-label {
+    max-width: 76px;
+  }
+  .omp-send {
+    padding: 0 9px;
+  }
+  .omp-composer-footer button {
+    flex: none;
+    white-space: nowrap;
+  }
+}
+
+/* 输入区聚合入口：一个按钮收起添加文件 / 引用资源 / 模式 / 技能 / 连接器 */
+.omp-entry-wrap {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+.omp-reference.active {
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+}
+.omp-entry-menu {
+  position: absolute;
+  bottom: calc(100% + var(--space-2));
+  left: 0;
+  z-index: 40;
+  width: max-content;
+  min-width: 190px;
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-lg);
+}
+.omp-entry-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 7px var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--font-md);
+  text-align: left;
+  cursor: pointer;
+}
+.omp-entry-item:hover,
+.omp-entry-item.active {
+  background: var(--surface-hover);
+}
+.omp-entry-item > span:first-of-type {
+  flex: 1;
+}
+.omp-entry-item-hint {
+  max-width: 130px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.omp-entry-submenu {
+  margin: 4px 0 2px;
+  padding: 4px;
+  border-top: 1px solid var(--border-subtle);
+}
+.omp-entry-subhead {
+  padding: 2px var(--space-2) 6px;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 600;
+}
+.omp-entry-subitem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 6px var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--font-md);
+  text-align: left;
+  cursor: pointer;
+}
+.omp-entry-subitem:hover,
+.omp-entry-subitem.active {
+  background: var(--surface-hover);
+}
+.omp-entry-subitem > span:first-child {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.omp-entry-subitem > span:first-child::first-letter {
+  text-transform: uppercase;
+}
+.omp-entry-subitem.static {
+  cursor: default;
+}
+.omp-entry-subitem.manage {
+  color: var(--accent-hover);
+}
+.omp-entry-server-meta {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+.omp-entry-empty {
+  padding: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}

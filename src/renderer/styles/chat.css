@@ -1,0 +1,545 @@
+/* ---------- 对话区 ---------- */
+.omp-chat {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-app);
+}
+.omp-messages-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.omp-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-8) clamp(var(--space-6), 6vw, var(--space-8));
+}
+.omp-scroll-bottom {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 6;
+  height: 108px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 10px;
+  background: linear-gradient(
+    to top,
+    var(--surface-app) 28%,
+    color-mix(in srgb, var(--surface-app) 68%, transparent) 64%,
+    transparent
+  );
+  pointer-events: none;
+  animation: omp-scroll-hint-in 160ms ease;
+}
+.omp-scroll-bottom button {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: 50%;
+  background: var(--surface-panel);
+  color: var(--text-secondary);
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: var(--shadow-md);
+  transition:
+    color 120ms ease,
+    border-color 120ms ease,
+    transform 120ms ease;
+}
+.omp-scroll-bottom button:hover {
+  border-color: var(--accent-ring);
+  color: var(--accent);
+  transform: translateY(-1px);
+}
+@keyframes omp-scroll-hint-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.omp-empty {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: var(--space-2);
+}
+.omp-empty-mark {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  margin-bottom: var(--space-3);
+  border-radius: 18px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+.omp-empty h2 {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 650;
+  letter-spacing: 0.2px;
+}
+.omp-empty p {
+  margin: 0;
+  max-width: 440px;
+  color: var(--text-secondary);
+  font-size: var(--font-lg);
+}
+.omp-empty-hints {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+.omp-empty-hints button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--surface-panel);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    color 120ms ease,
+    background 120ms ease;
+}
+.omp-empty-hints button:hover {
+  border-color: var(--accent-ring);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.omp-empty-hints button svg {
+  opacity: 0.6;
+}
+
+.omp-message {
+  display: flex;
+  gap: var(--space-3);
+  max-width: 900px;
+  margin: 0 auto var(--space-6);
+}
+.omp-message-avatar {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  margin-top: 1px;
+  border-radius: 9px;
+  background: var(--surface-panel);
+  border: 1px solid var(--border-subtle);
+  color: var(--accent);
+  font-size: var(--font-sm);
+  font-weight: 700;
+}
+.omp-message.user .omp-message-avatar {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.omp-message.system .omp-message-avatar {
+  color: var(--danger);
+}
+.omp-message-body {
+  flex: 1;
+  min-width: 0;
+}
+.omp-message-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.omp-message-meta > span:first-child {
+  font-size: var(--font-md);
+  font-weight: 600;
+}
+.omp-message-meta time {
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+}
+.omp-duration {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+  font-weight: 400;
+}
+.omp-duration svg {
+  color: var(--success);
+}
+.omp-message-actions {
+  display: flex;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+.omp-message-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    background 120ms ease,
+    color 120ms ease;
+}
+.omp-message:hover .omp-message-actions button,
+.omp-message-actions button:focus-visible {
+  opacity: 1;
+}
+.omp-message-actions button:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+.omp-message-content {
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-sm);
+}
+.omp-message.agent .omp-message-meta {
+  margin-bottom: 2px;
+}
+.omp-message.agent .omp-message-content {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.omp-agent-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: -2px 0 var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+.omp-agent-status > svg:first-child {
+  color: var(--success);
+}
+.omp-agent-status.busy > svg:first-child {
+  color: var(--accent);
+}
+.omp-process-fold {
+  margin: -2px 0 var(--space-3);
+}
+.omp-process-fold > summary.omp-agent-status {
+  margin: 0;
+  cursor: pointer;
+  list-style: none;
+}
+.omp-process-fold > summary.omp-agent-status::-webkit-details-marker {
+  display: none;
+}
+.omp-process-hint {
+  color: var(--text-muted);
+}
+.omp-process-hint::before {
+  content: "·";
+  margin-right: 6px;
+}
+.omp-process-body {
+  margin-top: var(--space-3);
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--border-subtle);
+}
+.omp-message.user .omp-message-content {
+  background: var(--accent-soft);
+  border-color: var(--accent-ring);
+}
+.omp-message.system .omp-message-content {
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border-subtle));
+  color: var(--danger);
+}
+
+.omp-markdown > :first-child {
+  margin-top: 0;
+}
+.omp-markdown > :last-child {
+  margin-bottom: 0;
+}
+.omp-markdown p {
+  margin: 0 0 var(--space-3);
+}
+.omp-markdown h2,
+.omp-markdown h3,
+.omp-markdown h4,
+.omp-markdown h5,
+.omp-markdown h6 {
+  margin: var(--space-5) 0 var(--space-2);
+  font-size: var(--font-lg);
+  font-weight: 650;
+}
+.omp-markdown h2 {
+  font-size: var(--font-xl);
+}
+.omp-markdown ul {
+  margin: 0 0 var(--space-3);
+  padding-left: 20px;
+}
+.omp-markdown li {
+  margin-bottom: 4px;
+}
+.omp-markdown code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-subtle);
+  color: var(--accent);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.92em;
+}
+
+.omp-codeblock {
+  overflow: hidden;
+  margin: var(--space-3) 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-code);
+}
+.omp-codeblock-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+.omp-codeblock-head > div {
+  display: flex;
+  gap: var(--space-1);
+}
+.omp-codeblock-head button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+.omp-codeblock-head button:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+.omp-codeblock pre {
+  margin: 0;
+  padding: var(--space-4);
+  overflow: auto;
+  max-height: 360px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: var(--font-md);
+  line-height: 1.65;
+}
+.omp-codeblock code {
+  padding: 0;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.omp-thinking {
+  margin: var(--space-3) 0;
+}
+.omp-thinking summary,
+.omp-tool-result summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  color: var(--text-muted);
+  font-size: var(--font-md);
+  font-weight: 500;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.omp-thinking summary:hover,
+.omp-tool-result summary:hover {
+  color: var(--text-secondary);
+}
+.omp-thinking summary::-webkit-details-marker,
+.omp-tool-result summary::-webkit-details-marker {
+  display: none;
+}
+.omp-fold-chevron {
+  margin-left: 2px;
+  color: var(--text-muted);
+  transition: transform 150ms ease;
+}
+details[open] > summary .omp-fold-chevron {
+  transform: rotate(180deg);
+}
+.omp-thinking-body {
+  margin-top: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-left: 2px solid var(--border-strong);
+  background: var(--surface-subtle);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--text-secondary);
+  font-size: var(--font-md);
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.omp-tool-card {
+  margin: 6px 0;
+  border: 0;
+  border-left: 2px solid var(--border-subtle);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: linear-gradient(90deg, var(--surface-subtle), transparent);
+  overflow: hidden;
+}
+.omp-tool-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 30px;
+  padding: 4px var(--space-3);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.omp-tool-summary::-webkit-details-marker {
+  display: none;
+}
+.omp-tool-summary:hover {
+  background: var(--surface-hover);
+}
+.omp-tool-icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+}
+.omp-tool-card.completed .omp-tool-icon {
+  color: var(--success);
+}
+.omp-tool-card.failed .omp-tool-icon {
+  color: var(--danger);
+}
+.omp-tool-label {
+  flex: none;
+  color: var(--text-secondary);
+  font-size: var(--font-md);
+  font-weight: 500;
+}
+.omp-tool-title-inline {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.omp-tool-status {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+.omp-tool-body {
+  padding: 0 var(--space-3) var(--space-3) 34px;
+}
+.omp-tool-section {
+  margin-top: var(--space-3);
+}
+.omp-tool-section-label {
+  margin-bottom: var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+.omp-tool-pre {
+  margin: 0;
+  padding: var(--space-3);
+  max-height: 260px;
+  overflow: auto;
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: var(--font-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.omp-typing {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 900px;
+  margin: -8px auto var(--space-6);
+  padding-left: 40px;
+  color: var(--text-muted);
+  font-size: var(--font-md);
+}
+.omp-typing-dots {
+  display: inline-flex;
+  gap: 3px;
+}
+.omp-typing-dots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: omp-pulse 1.2s infinite ease-in-out;
+}
+.omp-typing-dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.omp-typing-dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes omp-pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}

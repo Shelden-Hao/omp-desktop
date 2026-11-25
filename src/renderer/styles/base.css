@@ -1,0 +1,139 @@
+:root {
+  color-scheme: light;
+  font-family:
+    Inter, "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --font-scale: 1;
+  --font-xs: calc(10px * var(--font-scale));
+  --font-sm: calc(11px * var(--font-scale));
+  --font-md: calc(12px * var(--font-scale));
+  --font-lg: calc(14px * var(--font-scale));
+  --font-xl: calc(18px * var(--font-scale));
+
+  --surface-app: #f5f6f8;
+  --surface-panel: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-subtle: #f1f3f7;
+  --surface-hover: #e9edf4;
+  --surface-active: #dfe7fa;
+  --surface-input: #ffffff;
+  --surface-code: #f6f8fb;
+  --text-primary: #1b2333;
+  --text-secondary: #4d5870;
+  --text-muted: #8993a7;
+  --border-subtle: #e7eaf0;
+  --border-strong: #d7dce6;
+  --accent: #4c63d6;
+  --accent-hover: #3d52bd;
+  --accent-soft: #edf0ff;
+  --accent-ring: rgba(76, 99, 214, 0.22);
+  --success: #18965c;
+  --warning: #d97706;
+  --danger: #d9424b;
+  --shadow-sm: 0 1px 2px rgba(24, 34, 56, 0.05);
+  --shadow-md: 0 6px 20px rgba(24, 34, 56, 0.08);
+  --shadow-lg: 0 20px 60px rgba(24, 34, 56, 0.18);
+}
+
+:root[data-resolved-theme="dark"] {
+  color-scheme: dark;
+  --surface-app: #121620;
+  --surface-panel: #191e2a;
+  --surface-raised: #1d2331;
+  --surface-subtle: #212838;
+  --surface-hover: #2a3245;
+  --surface-active: #2c3a65;
+  --surface-input: #1b2130;
+  --surface-code: #141a26;
+  --text-primary: #edf1f9;
+  --text-secondary: #b7c0d4;
+  --text-muted: #7f8aa1;
+  --border-subtle: #2b3345;
+  --border-strong: #3a4459;
+  --accent: #8ba2ff;
+  --accent-hover: #a4b5ff;
+  --accent-soft: #263258;
+  --accent-ring: rgba(139, 162, 255, 0.24);
+  --success: #46c28a;
+  --warning: #f1ad52;
+  --danger: #ff6b73;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.24);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.45);
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+body {
+  overflow: hidden;
+  background: var(--surface-app);
+  color: var(--text-primary);
+}
+button,
+input,
+textarea {
+  font: inherit;
+}
+button {
+  color: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border: 3px solid transparent;
+  border-radius: 10px;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+  background-clip: content-box;
+}
+
+.omp-app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 880px;
+  min-height: 560px;
+  overflow: hidden;
+  background: var(--surface-app);
+  color: var(--text-primary);
+}

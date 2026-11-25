@@ -1,0 +1,266 @@
+/* ---------- 模型设置面板 ---------- */
+.omp-model-panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 12px);
+  z-index: 40;
+  display: flex;
+  width: min(556px, calc(100% - 8px));
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-lg);
+}
+.omp-model-list {
+  width: 264px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-subtle);
+}
+.omp-model-list-body {
+  flex: 1;
+  min-height: 0;
+  max-height: 336px;
+  overflow-y: auto;
+  padding: 6px;
+}
+.omp-model-option {
+  width: 100%;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.omp-model-option:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+.omp-model-option.active {
+  background: var(--surface-subtle);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.omp-model-option-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.omp-model-option-ctx {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+  font-weight: 400;
+}
+.omp-model-option svg {
+  flex: none;
+  color: var(--accent);
+}
+
+.omp-model-detail {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-3) var(--space-3) var(--space-2);
+}
+.omp-model-detail-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 4px var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.omp-model-detail-head strong {
+  font-size: var(--font-md);
+  font-weight: 650;
+}
+.omp-model-detail-head span {
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+}
+.omp-model-detail-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: var(--space-2);
+}
+.omp-model-row {
+  display: flex;
+  flex-direction: column;
+}
+.omp-model-row-btn,
+.omp-model-row.static {
+  width: 100%;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+}
+.omp-model-row.static {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.omp-model-row-btn {
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+.omp-model-row-btn:hover {
+  background: var(--surface-hover);
+}
+.omp-model-row-btn.open {
+  background: var(--surface-subtle);
+}
+.omp-model-row-label {
+  color: var(--text-secondary);
+}
+.omp-model-row-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.omp-model-row-value svg {
+  color: var(--text-muted);
+}
+.omp-model-row.static .omp-model-row-value {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.omp-model-drill {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.omp-model-drill-head {
+  align-self: flex-start;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+  cursor: pointer;
+}
+.omp-model-drill-head:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+.omp-model-drill-head svg {
+  transform: rotate(180deg);
+}
+.omp-model-drill-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 0 4px;
+}
+.omp-model-sub {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.omp-model-sub:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+.omp-model-sub.active {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.omp-model-sub svg {
+  color: var(--accent);
+}
+.omp-model-empty {
+  padding: var(--space-5) var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  line-height: 1.7;
+  text-align: center;
+}
+.omp-model-config {
+  width: 100%;
+  height: 38px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+.omp-model-config:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+.omp-send {
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: var(--font-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    opacity 120ms ease;
+}
+.omp-send:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+.omp-send:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.omp-send.stop {
+  background: var(--danger);
+}
+.omp-disclaimer {
+  max-width: 900px;
+  margin: var(--space-2) auto 0;
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+  text-align: center;
+}

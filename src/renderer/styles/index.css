@@ -1,0 +1,17 @@
+/**
+ * 样式入口：按 @import 顺序参与层叠，顺序即优先级（后面的覆盖前面的）。
+ * 新增样式请放进对应的域文件，不要在这里直接写规则。
+ */
+
+@import "./base.css";
+@import "./titlebar.css";
+@import "./workspace.css";
+@import "./chat.css";
+@import "./composer.css";
+@import "./composer-panels.css";
+@import "./model-panel.css";
+@import "./preview.css";
+@import "./modals.css";
+@import "./skills.css";
+@import "./composer-menu.css";
+@import "./settings.css";
