@@ -13,6 +13,7 @@ import {
 	normalizeSessionState,
 } from "./acp-client";
 import { DEFAULT_DOCS, type DocFile } from "./docs";
+import { SkillsPanel } from "./SkillsPanel";
 
 interface Session {
 	id: string;
@@ -976,6 +977,7 @@ export function App() {
 	const [status, setStatus] = useState("准备连接 omp…");
 	const [stderrLog, setStderrLog] = useState<string[]>([]);
 	const [showSettings, setShowSettings] = useState(false);
+	const [showSkills, setShowSkills] = useState(false);
 	const [settings, setSettings] = useState<DesktopSettings>({
 		ompCliPath: "",
 		bunPath: "",
@@ -2167,11 +2169,11 @@ export function App() {
 						<button
 							type="button"
 							className="omp-nav-static"
-							onClick={() => setShowSettings(true)}
-							title="MCP 与扩展在设置中配置"
+							onClick={() => setShowSkills(true)}
+							title="搜索、安装与管理 omp 技能"
 						>
 							<Icon name="layers" size={16} />
-							<span>技能与连接器</span>
+							<span>技能</span>
 						</button>
 					</div>
 
@@ -2970,6 +2972,18 @@ export function App() {
 						</div>
 					</div>
 				</div>
+			)}
+
+			{showSkills && (
+				<SkillsPanel
+					cwd={settings.cwd}
+					onClose={() => setShowSkills(false)}
+					onUseSkill={(name) => {
+						setInput((prev) => `${prev}${prev && !prev.endsWith(" ") ? " " : ""}/skill:${name} `);
+						setShowSkills(false);
+						inputRef.current?.focus();
+					}}
+				/>
 			)}
 
 			{stderrLog.length > 0 && (

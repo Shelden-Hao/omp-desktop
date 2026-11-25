@@ -23,6 +23,55 @@ export interface DesktopSettings {
   approvalMode: ApprovalMode;
 }
 
+export type SkillScope = "user" | "project";
+
+export interface SkillsReply<T> {
+  ok: boolean;
+  data?: T;
+  error?: string;
+}
+
+export interface SkillSummary {
+  name: string;
+  description: string;
+  filePath: string;
+  baseDir: string;
+  source: string;
+  hide: boolean;
+}
+
+export interface SkillListData {
+  skills: SkillSummary[];
+  warnings: Array<{ message: string }>;
+}
+
+export interface SkillSearchData {
+  total: number;
+  page: number;
+  perPage: number;
+  hits: Array<{
+    scope?: string;
+    name?: string;
+    description?: string;
+    weeklyDownloads?: number;
+    updatedAt?: number | string;
+    tags?: string[];
+    [key: string]: unknown;
+  }>;
+}
+
+export interface SkillPathsData {
+  userDir: string;
+  projectDir: string;
+}
+
+export interface SkillCommandReply {
+  ok: boolean;
+  stdout: string;
+  stderr: string;
+  error?: string;
+}
+
 /** `/context` 命令解析结果，全部来自 omp 真实统计 */
 export interface ContextPart {
   key: string;
@@ -72,6 +121,25 @@ export interface AcpBridge {
     stop(): Promise<{ ok: boolean }>;
     status(): Promise<{ running: boolean }>;
     send(line: string): Promise<{ ok: boolean; error?: string }>;
+  };
+  skills: {
+    list(cwd?: string): Promise<SkillsReply<SkillListData>>;
+    search(
+      query: string,
+      sort: "relevance" | "downloads" | "recent",
+    ): Promise<SkillsReply<SkillSearchData>>;
+    info(spec: string): Promise<SkillsReply<Record<string, unknown>>>;
+    install(spec: string, scope: SkillScope): Promise<SkillCommandReply>;
+    uninstall(name: string, scope: SkillScope): Promise<SkillCommandReply>;
+    publish(dir: string, scope: string): Promise<SkillCommandReply>;
+    config(key: string): Promise<SkillsReply<unknown>>;
+    enabled(name: string, enabled: boolean): Promise<SkillsReply<void>>;
+    paths(): Promise<SkillsReply<SkillPathsData>>;
+    create(input: {
+      name: string;
+      description: string;
+      scope: SkillScope;
+    }): Promise<SkillsReply<{ path: string }>>;
   };
   window: {
     minimize(): Promise<void>;

@@ -3,6 +3,12 @@ import type {
 	DesktopSettings,
 	ModelContextInfo,
 	OpenedFile,
+	SkillCommandReply,
+	SkillListData,
+	SkillScope,
+	SkillPathsData,
+	SkillSearchData,
+	SkillsReply,
 	StoredSession,
 	ToolResult,
 } from "../renderer/acp-client";
@@ -37,6 +43,25 @@ export interface DesktopBridge {
 		stop(): Promise<{ ok: boolean }>;
 		status(): Promise<{ running: boolean }>;
 		send(line: string): Promise<{ ok: boolean; error?: string }>;
+	};
+	skills: {
+		list(cwd?: string): Promise<SkillsReply<SkillListData>>;
+		search(
+			query: string,
+			sort: "relevance" | "downloads" | "recent",
+		): Promise<SkillsReply<SkillSearchData>>;
+		info(spec: string): Promise<SkillsReply<Record<string, unknown>>>;
+		install(spec: string, scope: SkillScope): Promise<SkillCommandReply>;
+		uninstall(name: string, scope: SkillScope): Promise<SkillCommandReply>;
+		publish(dir: string, scope: string): Promise<SkillCommandReply>;
+		config(key: string): Promise<SkillsReply<unknown>>;
+		enabled(name: string, enabled: boolean): Promise<SkillsReply<void>>;
+		paths(): Promise<SkillsReply<SkillPathsData>>;
+		create(input: {
+			name: string;
+			description: string;
+			scope: SkillScope;
+		}): Promise<SkillsReply<{ path: string }>>;
 	};
 	window: {
 		minimize(): Promise<void>;
@@ -78,6 +103,18 @@ const bridge: DesktopBridge = {
 		stop: () => ipcRenderer.invoke("agent:stop"),
 		status: () => ipcRenderer.invoke("agent:status"),
 		send: (line) => ipcRenderer.invoke("agent:send", line),
+	},
+	skills: {
+		list: (cwd) => ipcRenderer.invoke("skills:list", cwd),
+		search: (query, sort) => ipcRenderer.invoke("skills:search", query, sort),
+		info: (spec) => ipcRenderer.invoke("skills:info", spec),
+		install: (spec, scope) => ipcRenderer.invoke("skills:install", spec, scope),
+		uninstall: (name, scope) => ipcRenderer.invoke("skills:uninstall", name, scope),
+		publish: (dir, scope) => ipcRenderer.invoke("skills:publish", dir, scope),
+		config: (key) => ipcRenderer.invoke("skills:config", key),
+		enabled: (name, enabled) => ipcRenderer.invoke("skills:enabled", name, enabled),
+		paths: () => ipcRenderer.invoke("skills:paths"),
+		create: (input) => ipcRenderer.invoke("skills:create", input),
 	},
 	window: {
 		minimize: () => ipcRenderer.invoke("window:minimize"),

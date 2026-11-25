@@ -13,6 +13,20 @@ import {
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { readModelContexts } from "./model-context";
+import {
+	createSkill,
+	getSkillConfigValue,
+	getSkillPaths,
+	installSkill,
+	listSkills,
+	searchSkills,
+	setSkillEnabled,
+	showSkillInfo,
+	publishSkill,
+	skillCall,
+	skillCommand,
+	uninstallSkill,
+} from "./skills";
 
 // ---------------------------------------------------------------------------
 // 配置：全部可改，默认自动探测本机已安装的 bun + omp
@@ -654,6 +668,38 @@ app.whenReady().then(() => {
 	});
 
 	ipcMain.handle("file:read", (_e, filePath: string) => readTextDocument(filePath));
+
+	// 技能管理：命令全部委托给 omp CLI，返回结构化结果避免跨进程异常丢失信息。
+	ipcMain.handle("skills:list", (_e, cwd?: string) =>
+		skillCall(() => listSkills(settings, cwd || settings.cwd)),
+	);
+	ipcMain.handle("skills:search", (_e, query: string, sort: "relevance" | "downloads" | "recent") =>
+		skillCall(() => searchSkills(settings, query, sort)),
+	);
+	ipcMain.handle("skills:info", (_e, spec: string) =>
+		skillCall(() => showSkillInfo(settings, spec)),
+	);
+	ipcMain.handle("skills:install", (_e, spec: string, scope: "user" | "project") =>
+		skillCommand(() => installSkill(settings, spec, scope)),
+	);
+	ipcMain.handle("skills:uninstall", (_e, name: string, scope: "user" | "project") =>
+		skillCommand(() => uninstallSkill(settings, name, scope)),
+	);
+	ipcMain.handle("skills:publish", (_e, dir: string, scope: string) =>
+		skillCommand(() => publishSkill(settings, dir, scope)),
+	);
+	ipcMain.handle("skills:enabled", (_e, name: string, enabled: boolean) =>
+		skillCall(() => setSkillEnabled(settings, name, enabled)),
+	);
+	ipcMain.handle("skills:config", (_e, key: string) =>
+		skillCall(() => getSkillConfigValue(settings, key)),
+	);
+	ipcMain.handle("skills:paths", () => skillCall(() => getSkillPaths(settings)));
+	ipcMain.handle(
+		"skills:create",
+		(_e, input: { name: string; description: string; scope: "user" | "project" }) =>
+			skillCall(() => createSkill(settings, input)),
+	);
 
 	const acpToolHandlers: Record<
 		string,
