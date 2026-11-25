@@ -1450,19 +1450,27 @@ details[open] > summary .omp-fold-chevron {
 }
 .omp-composer-input {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: var(--space-2);
 }
 .omp-composer-input textarea {
-  flex: 1 1 180px;
+  flex: 1 1 0;
   width: auto;
-  min-width: 180px;
+  min-width: 0;
 }
 .omp-skill-chips {
   display: flex;
-  flex-wrap: wrap;
+  flex: none;
+  align-items: center;
   gap: var(--space-1);
+  /* 多个 chip 时横向滚动，不能把输入行挤成两行 */
+  max-width: 60%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.omp-skill-chips::-webkit-scrollbar {
+  display: none;
 }
 .omp-skill-chip {
   display: inline-flex;
