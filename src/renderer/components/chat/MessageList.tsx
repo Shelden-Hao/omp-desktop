@@ -129,15 +129,6 @@ function Message({ message, isActive, query, onOpenDoc, onRetry }: MessageProps)
 
 	return (
 		<article className={`omp-message ${message.role}`} data-message-id={message.id}>
-			<div className="omp-message-avatar">
-				{message.role === "user" ? (
-					"你"
-				) : message.role === "agent" ? (
-					<Icon name="spark" size={13} />
-				) : (
-					<Icon name="warning" size={13} />
-				)}
-			</div>
 			<div className="omp-message-body">
 				<div className="omp-message-meta">
 					<span>{message.role === "user" ? "你" : message.role === "agent" ? "omp" : "系统"}</span>

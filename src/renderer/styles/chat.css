@@ -135,41 +135,15 @@
 }
 
 .omp-message {
-  display: flex;
-  gap: var(--space-3);
-  max-width: 900px;
+  display: block;
+  max-width: 860px;
   margin: 0 auto var(--space-6);
 }
-.omp-message-avatar {
-  width: 28px;
-  height: 28px;
-  flex: none;
-  display: grid;
-  place-items: center;
-  margin-top: 1px;
-  border-radius: 9px;
-  background: var(--surface-panel);
-  border: 1px solid var(--border-subtle);
-  color: var(--accent);
-  font-size: var(--font-sm);
-  font-weight: 700;
-}
-.omp-message.user .omp-message-avatar {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-.omp-message.agent .omp-message-avatar {
-  background: var(--accent-soft);
-  border-color: transparent;
-  color: var(--accent);
-}
-.omp-message.system .omp-message-avatar {
-  color: var(--danger);
-}
 .omp-message-body {
-  flex: 1;
   min-width: 0;
+}
+.omp-message.user .omp-message-meta {
+  justify-content: flex-end;
 }
 .omp-message-meta {
   display: flex;
