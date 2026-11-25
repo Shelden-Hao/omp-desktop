@@ -26,7 +26,7 @@ import { useMessageStore } from "./hooks/use-message-store";
 import { useRunningFlag } from "./hooks/use-running-flag";
 import { useSessionSearch } from "./hooks/use-session-search";
 import { SettingsPanel } from "./panels/settings";
-import { SkillsPanel } from "./panels/SkillsPanel";
+import { SkillsPanel } from "./panels/skills";
 
 const DEFAULT_SETTINGS: DesktopSettings = {
 	ompCliPath: "",
