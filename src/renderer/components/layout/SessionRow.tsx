@@ -1,0 +1,222 @@
+/**
+ * 会话列表行：选中、运行态、时间，以及「三点」操作菜单（置顶/重命名/打开文件夹/删除）。
+ * 只有打开文件夹是 omp 之外的真实系统能力，其余三项都落在本地索引上，文案里不夸大。
+ */
+
+import { useEffect, useRef, useState } from "react";
+import { relativeTime } from "../../core/format";
+import type { Session } from "../../core/session-filters";
+import { useDismiss } from "../../hooks/use-dismiss";
+import { Icon } from "../common/Icon";
+
+const MENU_WIDTH = 184;
+
+interface SessionRowProps {
+	session: Session;
+	active: boolean;
+	running: boolean;
+	/** 分组视图里行本身就是缩进项，不画会话图标 */
+	grouped?: boolean;
+	onSelect(session: Session): void;
+	onTogglePin(session: Session): void;
+	onRename(session: Session, title: string): void;
+	onOpenFolder(session: Session): void;
+	onDelete(session: Session): void;
+}
+
+interface MenuPosition {
+	top: number;
+	left: number;
+}
+
+export function SessionRow({
+	session,
+	active,
+	running,
+	grouped = false,
+	onSelect,
+	onTogglePin,
+	onRename,
+	onOpenFolder,
+	onDelete,
+}: SessionRowProps) {
+	const [menuOpen, setMenuOpen] = useState(false);
+	const [position, setPosition] = useState<MenuPosition>({ top: 0, left: 0 });
+	const [confirmDelete, setConfirmDelete] = useState(false);
+	const [renaming, setRenaming] = useState(false);
+	const [draft, setDraft] = useState("");
+	const rowRef = useRef<HTMLDivElement>(null);
+	const moreRef = useRef<HTMLButtonElement>(null);
+
+	const closeMenu = () => {
+		setMenuOpen(false);
+		setConfirmDelete(false);
+	};
+
+	useDismiss(menuOpen, { ref: rowRef, onDismiss: closeMenu });
+
+	// 菜单用 fixed 定位，避免被列表的 overflow 裁掉；列表一滚就对不上，直接关掉
+	useEffect(() => {
+		if (!menuOpen) return;
+		const onScroll = () => {
+			setMenuOpen(false);
+			setConfirmDelete(false);
+		};
+		document.addEventListener("scroll", onScroll, true);
+		return () => document.removeEventListener("scroll", onScroll, true);
+	}, [menuOpen]);
+
+	const toggleMenu = () => {
+		if (menuOpen) {
+			closeMenu();
+			return;
+		}
+		const rect = moreRef.current?.getBoundingClientRect();
+		if (rect) {
+			setPosition({
+				top: rect.bottom + 4,
+				left: Math.max(8, Math.min(rect.right - MENU_WIDTH, window.innerWidth - MENU_WIDTH - 8)),
+			});
+		}
+		setConfirmDelete(false);
+		setMenuOpen(true);
+	};
+
+	const startRename = () => {
+		setDraft(session.title);
+		setRenaming(true);
+		closeMenu();
+	};
+
+	const commitRename = () => {
+		const title = draft.trim();
+		setRenaming(false);
+		if (!title || title === session.title) return;
+		onRename(session, title);
+	};
+
+	return (
+		<div
+			ref={rowRef}
+			className={`omp-session ${active ? "active" : ""} ${grouped ? "grouped" : ""} ${
+				menuOpen ? "menu-open" : ""
+			}`}
+		>
+			{renaming ? (
+				<input
+					className="omp-session-rename"
+					value={draft}
+					autoFocus
+					aria-label="重命名会话"
+					onChange={(event) => setDraft(event.target.value)}
+					onBlur={commitRename}
+					onKeyDown={(event) => {
+						if (event.key === "Enter") {
+							event.preventDefault();
+							commitRename();
+						} else if (event.key === "Escape") {
+							event.preventDefault();
+							setRenaming(false);
+						}
+					}}
+				/>
+			) : (
+				<button
+					type="button"
+					className="omp-session-main"
+					onClick={() => {
+						closeMenu();
+						onSelect(session);
+					}}
+					title={session.title}
+				>
+					{!grouped && <Icon name={session.pinned ? "pin" : "chat"} size={14} />}
+					<span className="omp-session-title">{session.title}</span>
+					{running && active ? (
+						<span className="omp-session-spinner" title="运行中" />
+					) : (
+						<time>{relativeTime(session.ts)}</time>
+					)}
+				</button>
+			)}
+
+			<button
+				ref={moreRef}
+				type="button"
+				className="omp-session-more"
+				aria-label="会话操作"
+				aria-haspopup="menu"
+				aria-expanded={menuOpen}
+				onClick={toggleMenu}
+			>
+				<Icon name="more" size={14} />
+			</button>
+
+			{menuOpen && (
+				<div
+					className="omp-session-menu"
+					role="menu"
+					style={{ top: position.top, left: position.left }}
+				>
+					<button
+						type="button"
+						role="menuitem"
+						onClick={() => {
+							onTogglePin(session);
+							closeMenu();
+						}}
+					>
+						<Icon name="pin" size={14} />
+						<span>{session.pinned ? "取消置顶" : "置顶"}</span>
+					</button>
+					<button type="button" role="menuitem" onClick={startRename}>
+						<Icon name="pencil" size={14} />
+						<span>重命名</span>
+					</button>
+					<button
+						type="button"
+						role="menuitem"
+						onClick={() => {
+							onOpenFolder(session);
+							closeMenu();
+						}}
+					>
+						<Icon name="folder" size={14} />
+						<span>打开文件夹</span>
+					</button>
+					<div className="omp-session-menu-seg" />
+					{confirmDelete ? (
+						<div className="omp-session-confirm">
+							<p>只从列表移除，omp 里的对话记录仍保留。</p>
+							<div className="omp-session-confirm-actions">
+								<button
+									type="button"
+									className="danger"
+									onClick={() => {
+										closeMenu();
+										void onDelete(session);
+									}}
+								>
+									删除
+								</button>
+								<button type="button" onClick={() => setConfirmDelete(false)}>
+									取消
+								</button>
+							</div>
+						</div>
+					) : (
+						<button
+							type="button"
+							role="menuitem"
+							className="danger"
+							onClick={() => setConfirmDelete(true)}
+						>
+							<Icon name="trash" size={14} />
+							<span>删除任务</span>
+						</button>
+					)}
+				</div>
+			)}
+		</div>
+	);
+}

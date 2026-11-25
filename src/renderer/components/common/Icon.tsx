@@ -34,7 +34,10 @@ export type IconName =
 	| "maximize"
 	| "sidebar"
 	| "filter"
-	| "shield";
+	| "shield"
+	| "pin"
+	| "pencil"
+	| "trash";
 
 export function Icon({
 	name,
@@ -171,6 +174,24 @@ export function Icon({
 			return (
 				<svg {...common}>
 					<path d="M12 3.2 5 6v5.4c0 4.3 2.9 7.4 7 9.4 4.1-2 7-5.1 7-9.4V6l-7-2.8Z" />
+				</svg>
+			);
+		case "pin":
+			return (
+				<svg {...common}>
+					<path d="M9 3h6M12 3v7M8 10h8l-1.4 4.5H9.4L8 10ZM12 14.5V21" />
+				</svg>
+			);
+		case "pencil":
+			return (
+				<svg {...common}>
+					<path d="M4 20h4L20 8l-4-4L4 16v4ZM14 6l4 4" />
+				</svg>
+			);
+		case "trash":
+			return (
+				<svg {...common}>
+					<path d="M4 7h16M9 7V4h6v3M6.5 7l1 13h9l1-13M10 11v6M14 11v6" />
 				</svg>
 			);
 		case "refresh":

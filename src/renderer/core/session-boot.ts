@@ -22,16 +22,22 @@ export async function loadSessionIndex(
   settings: DesktopSettings,
   stored: StoredSession[],
 ): Promise<SessionIndex> {
-  const list: Session[] = stored.map((session) => ({
-    id: session.id,
-    title: session.title,
-    cwd: session.cwd || settings.cwd,
-    ts: session.ts,
-  }));
+  // hidden 是本地「已移除」标记：既不进列表，也要挡住 session/list 重新加回来
+  const hidden = new Set(stored.filter((session) => session.hidden).map((session) => session.id));
+  const list: Session[] = stored
+    .filter((session) => !session.hidden)
+    .map((session) => ({
+      id: session.id,
+      title: session.title,
+      cwd: session.cwd || settings.cwd,
+      ts: session.ts,
+      pinned: session.pinned,
+    }));
 
   try {
     const remote = await acp.listSessions();
     for (const session of remote.sessions || []) {
+      if (hidden.has(session.sessionId)) continue;
       if (!list.some((item) => item.id === session.sessionId)) {
         list.push({
           id: session.sessionId,

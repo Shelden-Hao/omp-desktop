@@ -24,7 +24,14 @@ export function loadSessions(): StoredSession[] {
 					typeof item.title === "string" &&
 					typeof item.cwd === "string",
 			)
-			.map((item) => ({ id: item.id, title: item.title, cwd: item.cwd, ts: item.ts }));
+			.map((item) => ({
+				id: item.id,
+				title: item.title,
+				cwd: item.cwd,
+				ts: item.ts,
+				...(item.pinned === true ? { pinned: true } : {}),
+				...(item.hidden === true ? { hidden: true } : {}),
+			}));
 	} catch {
 		return [];
 	}

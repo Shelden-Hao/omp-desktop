@@ -326,6 +326,14 @@ export function App() {
 					cwd={settings.cwd}
 					connected={connected}
 					onSelect={(session) => void connection.selectSession(session)}
+					onTogglePin={(session) => connection.togglePin(session.id)}
+					onRename={(session, title) => connection.renameSession(session.id, title)}
+					onOpenFolder={(session) => {
+						void window.desktop.system.openPath(session.cwd || settings.cwd).then((reply) => {
+							if (!reply.ok) setStatus(`打开文件夹失败：${reply.error || "路径不可用"}`);
+						});
+					}}
+					onDelete={(session) => connection.deleteSession(session)}
 					onNew={() => void connection.newSession()}
 					onOpenSkills={() => setShowSkills(true)}
 					onOpenSettings={() => setShowSettings(true)}

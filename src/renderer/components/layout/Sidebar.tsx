@@ -3,9 +3,10 @@
  * 会话状态由上层推导后传入，这里只负责展示与选择。
  */
 
-import { dirName, relativeTime, shortPath } from "../../core/format";
+import { dirName, shortPath } from "../../core/format";
 import type { Session, SidebarView } from "../../core/session-filters";
 import { Icon } from "../common/Icon";
+import { SessionRow } from "./SessionRow";
 
 interface SidebarProps {
 	collapsed: boolean;
@@ -17,6 +18,10 @@ interface SidebarProps {
 	cwd: string;
 	connected: boolean;
 	onSelect(session: Session): void;
+	onTogglePin(session: Session): void;
+	onRename(session: Session, title: string): void;
+	onOpenFolder(session: Session): void;
+	onDelete(session: Session): void;
 	onNew(): void;
 	onOpenSkills(): void;
 	onOpenSettings(): void;
@@ -33,6 +38,10 @@ export function Sidebar({
 	cwd,
 	connected,
 	onSelect,
+	onTogglePin,
+	onRename,
+	onOpenFolder,
+	onDelete,
 	onNew,
 	onOpenSkills,
 	onOpenSettings,
@@ -91,21 +100,17 @@ export function Sidebar({
 							</div>
 						)}
 						{sessions.map((session) => (
-							<button
+							<SessionRow
 								key={session.id}
-								type="button"
-								className={`omp-session ${session.id === activeId ? "active" : ""}`}
-								onClick={() => onSelect(session)}
-								title={session.title}
-							>
-								<Icon name="chat" size={14} />
-								<span className="omp-session-title">{session.title}</span>
-								{running && session.id === activeId ? (
-									<span className="omp-session-spinner" title="运行中" />
-								) : (
-									<time>{relativeTime(session.ts)}</time>
-								)}
-							</button>
+								session={session}
+								active={session.id === activeId}
+								running={running}
+								onSelect={onSelect}
+								onTogglePin={onTogglePin}
+								onRename={onRename}
+								onOpenFolder={onOpenFolder}
+								onDelete={onDelete}
+							/>
 						))}
 					</div>
 				) : (
@@ -129,20 +134,18 @@ export function Sidebar({
 									<span className="omp-count">{items.length}</span>
 								</div>
 								{items.map((session) => (
-									<button
+									<SessionRow
 										key={session.id}
-										type="button"
-										className={`omp-session grouped ${session.id === activeId ? "active" : ""}`}
-										onClick={() => onSelect(session)}
-										title={session.title}
-									>
-										<span className="omp-session-title">{session.title}</span>
-										{running && session.id === activeId ? (
-											<span className="omp-session-spinner" title="运行中" />
-										) : (
-											<time>{relativeTime(session.ts)}</time>
-										)}
-									</button>
+										session={session}
+										active={session.id === activeId}
+										running={running}
+										grouped
+										onSelect={onSelect}
+										onTogglePin={onTogglePin}
+										onRename={onRename}
+										onOpenFolder={onOpenFolder}
+										onDelete={onDelete}
+									/>
 								))}
 							</div>
 						))}

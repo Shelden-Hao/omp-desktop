@@ -9,6 +9,8 @@ export interface Session {
   title: string;
   cwd?: string;
   ts?: number;
+  /** 置顶会话排在列表最前，纯本地偏好 */
+  pinned?: boolean;
 }
 
 export type SidebarView = "recent" | "grouped";
@@ -75,8 +77,12 @@ export function filterSessions({
     return "done";
   };
 
-  return sessions.filter(
+  const matched = sessions.filter(
     (session) =>
       matchTime(session.ts) && (statusFilter === "all" || statusOf(session) === statusFilter),
+  );
+  // toSorted 稳定：置顶只改分组顺序，不打乱原有先后
+  return matched.toSorted(
+    (left, right) => Number(Boolean(right.pinned)) - Number(Boolean(left.pinned)),
   );
 }

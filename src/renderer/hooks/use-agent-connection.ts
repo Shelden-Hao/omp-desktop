@@ -17,6 +17,7 @@ import type {
   ContextReport,
   DesktopSettings,
   SessionState,
+  StoredSession,
 } from "../../shared/types";
 import { AcpClient, isStaleSessionError, normalizeSessionState } from "../core/acp/client";
 import {
@@ -73,6 +74,11 @@ export interface AgentConnection {
   rebindSession: (acp: AcpClient, oldId: string, cwd: string) => Promise<string>;
   selectSession: (session: Session) => Promise<void>;
   newSession: () => Promise<void>;
+  /** 重命名只改本地索引标题，omp 里的会话标题不受影响 */
+  renameSession: (id: string, title: string) => void;
+  togglePin: (id: string) => void;
+  /** 仅从列表移除：omp 对话记录保留，靠 hidden 标记避免 session/list 加回来 */
+  deleteSession: (session: Session) => Promise<void>;
   changeApprovalMode: (mode: ApprovalMode) => Promise<void>;
 }
 
@@ -100,6 +106,8 @@ export function useAgentConnection({
   const activeIdRef = useRef<string | null>(null);
   const loadedSessions = useRef<Set<string>>(new Set());
   const pendingPermissionRef = useRef<PermissionState | null>(null);
+  /** 已从列表移除的会话记录：persist 时一并写回，重启后仍能挡住 session/list */
+  const hiddenRef = useRef<StoredSession[]>([]);
   /** 正在静默采集 `/context` 输出时指向该会话，期间的 chunk 不进对话 */
   const silentContextRef = useRef<{ sessionId: string; text: string } | null>(null);
   const contextBusyRef = useRef(false);
@@ -124,14 +132,16 @@ export function useAgentConnection({
   const persistSessions = useCallback(async (next: Session[]) => {
     try {
       const loaded = await window.desktop.settings.get();
-      await window.desktop.sessions.set(
-        next.map((session) => ({
+      await window.desktop.sessions.set([
+        ...next.map((session) => ({
           id: session.id,
           title: session.title,
           cwd: session.cwd || loaded.cwd,
           ts: session.ts || Date.now(),
+          ...(session.pinned ? { pinned: true } : {}),
         })),
-      );
+        ...hiddenRef.current,
+      ]);
     } catch (error) {
       setStatus(`会话保存失败：${(error as Error).message}`);
     }
@@ -375,6 +385,7 @@ export function useAgentConnection({
         await acp.initialize();
         const loaded = await bridge.settings.get();
         const stored = await bridge.sessions.get();
+        hiddenRef.current = stored.filter((session) => session.hidden);
         const index = await loadSessionIndex(acp, loaded, stored);
         const { list } = index;
         if (index.created) {
@@ -445,35 +456,104 @@ export function useAgentConnection({
     [client, loadSessionHistory, probeContext, setRunning],
   );
 
-  const newSession = useCallback(async () => {
-    if (!client) return;
-    try {
-      const loaded = await window.desktop.settings.get();
-      const session = await client.newSession(loaded.cwd);
-      const next: Session[] = [
-        ...sessions,
-        {
-          id: session.sessionId,
-          title: `会话 ${sessions.length + 1}`,
-          cwd: loaded.cwd,
-          ts: Date.now(),
-        },
-      ];
-      loadedSessions.current.add(session.sessionId);
-      setSessionStates((prev) => ({
-        ...prev,
-        [session.sessionId]: normalizeSessionState(session),
-      }));
+  /** 以给定列表为基础新建 omp 会话；删除最后一个会话后也走这里补一个空的 */
+  const createSession = useCallback(
+    async (base: Session[]) => {
+      if (!client) return;
+      try {
+        const loaded = await window.desktop.settings.get();
+        const session = await client.newSession(loaded.cwd);
+        const next: Session[] = [
+          ...base,
+          {
+            id: session.sessionId,
+            title: `会话 ${base.length + 1}`,
+            cwd: loaded.cwd,
+            ts: Date.now(),
+          },
+        ];
+        loadedSessions.current.add(session.sessionId);
+        setSessionStates((prev) => ({
+          ...prev,
+          [session.sessionId]: normalizeSessionState(session),
+        }));
+        setSessions(next);
+        void persistSessions(next);
+        // 空会话在筛选里算「规划中」，所以显式登记空消息列表
+        setMessagesBySession((prev) => ({ ...prev, [session.sessionId]: [] }));
+        setActiveId(session.sessionId);
+        setRunning(false);
+      } catch (error) {
+        setStatus(`新建会话失败：${(error as Error).message}`);
+      }
+    },
+    [client, persistSessions, setRunning, setMessagesBySession],
+  );
+
+  const newSession = useCallback(() => createSession(sessions), [createSession, sessions]);
+
+  const renameSession = useCallback(
+    (id: string, title: string) => {
+      const next = sessions.map((session) => (session.id === id ? { ...session, title } : session));
       setSessions(next);
       void persistSessions(next);
-      // 空会话在筛选里算「规划中」，所以显式登记空消息列表
-      setMessagesBySession((prev) => ({ ...prev, [session.sessionId]: [] }));
-      setActiveId(session.sessionId);
-      setRunning(false);
-    } catch (error) {
-      setStatus(`新建会话失败：${(error as Error).message}`);
-    }
-  }, [client, persistSessions, setRunning, sessions, setMessagesBySession]);
+    },
+    [sessions, persistSessions],
+  );
+
+  const togglePin = useCallback(
+    (id: string) => {
+      const next = sessions.map((session) =>
+        session.id === id ? { ...session, pinned: !session.pinned } : session,
+      );
+      setSessions(next);
+      void persistSessions(next);
+    },
+    [sessions, persistSessions],
+  );
+
+  const deleteSession = useCallback(
+    async (session: Session) => {
+      const next = sessions.filter((item) => item.id !== session.id);
+      // 记录 hidden：否则下次 session/list 会把它当成「omp 里有、本地没有」重新加回来
+      hiddenRef.current = [
+        ...hiddenRef.current.filter((item) => item.id !== session.id),
+        {
+          id: session.id,
+          title: session.title,
+          cwd: session.cwd || "",
+          ts: session.ts,
+          hidden: true,
+        },
+      ];
+      setSessions(next);
+      void persistSessions(next);
+      setMessagesBySession((prev) => {
+        const copy = { ...prev };
+        delete copy[session.id];
+        return copy;
+      });
+      if (activeIdRef.current !== session.id) return;
+      const fallback = next[0];
+      if (fallback) {
+        await selectSession(fallback);
+      } else if (client) {
+        await createSession([]);
+      } else {
+        setActiveId(null);
+        setRunning(false);
+      }
+    },
+    [
+      client,
+      createSession,
+      persistSessions,
+      selectSession,
+      sessions,
+      setMessagesBySession,
+      setRunning,
+    ],
+  );
 
   /** 切换安全等级：omp 只接受启动参数，因此要重启 ACP 进程并恢复当前会话 */
   const changeApprovalMode = useCallback(
@@ -524,6 +604,9 @@ export function useAgentConnection({
     rebindSession,
     selectSession,
     newSession,
+    renameSession,
+    togglePin,
+    deleteSession,
     changeApprovalMode,
   };
 }
