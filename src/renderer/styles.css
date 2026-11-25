@@ -1458,6 +1458,9 @@ details[open] > summary .omp-fold-chevron {
   flex: 1 1 0;
   width: auto;
   min-width: 0;
+  min-height: 24px;
+  /* 与 chip 统一到 24px 行框，否则两者文字基线错位 */
+  line-height: 24px;
 }
 .omp-skill-chips {
   display: flex;
@@ -1477,14 +1480,15 @@ details[open] > summary .omp-fold-chevron {
   flex: none;
   align-items: center;
   gap: 5px;
-  padding: 3px 9px 3px 4px;
+  height: 24px;
+  padding: 0 9px 0 4px;
   border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border-subtle));
   border-radius: 999px;
   background: var(--accent-soft);
   color: var(--accent-hover);
   font-size: var(--font-md);
   font-weight: 600;
-  line-height: 1.5;
+  line-height: 22px;
 }
 .omp-skill-chip-remove {
   display: grid;
