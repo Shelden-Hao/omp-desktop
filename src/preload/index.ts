@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
 	DesktopSettings,
+	McpConfigInfo,
 	ModelContextInfo,
 	OpenedFile,
 	SkillCommandReply,
@@ -28,6 +29,9 @@ export interface DesktopBridge {
 	files: {
 		open(): Promise<OpenedFile | null>;
 		read(path: string): Promise<OpenedFile>;
+	};
+	mcp: {
+		list(): Promise<McpConfigInfo>;
 	};
 	acpTools: {
 		fsRead(params: Record<string, unknown>): Promise<ToolResult>;
@@ -88,6 +92,9 @@ const bridge: DesktopBridge = {
 	files: {
 		open: () => ipcRenderer.invoke("file:open"),
 		read: (path) => ipcRenderer.invoke("file:read", path),
+	},
+	mcp: {
+		list: () => ipcRenderer.invoke("mcp:list"),
 	},
 	acpTools: {
 		fsRead: (params) => ipcRenderer.invoke("acp:fs-read", params),

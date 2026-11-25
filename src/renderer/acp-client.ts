@@ -115,6 +115,20 @@ export interface ToolResult {
   error?: string;
 }
 
+/** omp MCP 连接器配置（主进程只读汇总，见 main/mcp.ts） */
+export interface McpServerInfo {
+  name: string;
+  scope: "user" | "project";
+  source: string;
+  enabled: boolean;
+  transport: string;
+}
+
+export interface McpConfigInfo {
+  servers: McpServerInfo[];
+  paths: Array<{ scope: "user" | "project"; path: string; exists: boolean }>;
+}
+
 export interface AcpBridge {
   agent: {
     start(): Promise<{ ok: boolean; error?: string }>;
@@ -160,6 +174,9 @@ export interface AcpBridge {
   files: {
     open(): Promise<OpenedFile | null>;
     read(path: string): Promise<OpenedFile>;
+  };
+  mcp: {
+    list(): Promise<McpConfigInfo>;
   };
   acpTools: {
     fsRead(params: Record<string, unknown>): Promise<ToolResult>;

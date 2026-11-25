@@ -13,6 +13,7 @@ import {
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { readModelContexts } from "./model-context";
+import { listMcpServers } from "./mcp";
 import {
 	createSkill,
 	getSkillConfigValue,
@@ -668,6 +669,7 @@ app.whenReady().then(() => {
 	});
 
 	ipcMain.handle("file:read", (_e, filePath: string) => readTextDocument(filePath));
+	ipcMain.handle("mcp:list", () => listMcpServers(settings.cwd));
 
 	// 技能管理：命令全部委托给 omp CLI，返回结构化结果避免跨进程异常丢失信息。
 	ipcMain.handle("skills:list", (_e, cwd?: string) =>
