@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, statfsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { app, clipboard, dialog, powerSaveBlocker, session, shell } from "electron";
-import type { LinkOpenMode, ProxyMode, RuntimeInfo, SystemInfoData } from "../renderer/acp-client";
+import type { LinkOpenMode, ProxyMode, RuntimeInfo, SystemInfoData } from "../shared/types";
 
 export interface RuntimeSettings {
 	linkOpenMode: LinkOpenMode;

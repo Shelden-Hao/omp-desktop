@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parse } from "yaml";
-import type { ApprovalMode } from "../renderer/acp-client";
+import type { ApprovalMode } from "../shared/types";
 import type { SkillCommandResult } from "./skills";
 import { runOmpCommand, type SkillHostSettings } from "./skills";
 

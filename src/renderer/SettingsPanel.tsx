@@ -16,7 +16,7 @@ import {
 	type SystemInfoData,
 	type ThemeMode,
 	type ToolPolicy,
-} from "./acp-client";
+} from "../shared/types";
 
 interface SettingsPanelProps {
 	settings: DesktopSettings;

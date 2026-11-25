@@ -4,22 +4,60 @@ import type {
 	KeyboardEvent as ReactKeyboardEvent,
 	MouseEvent as ReactMouseEvent,
 } from "react";
+import type { AcpEvent } from "../shared/protocol";
+import type {
+	ApprovalMode,
+	AuditEntry,
+	ChatMessage,
+	ContentBlock,
+	ContextPart,
+	ContextReport,
+	DesktopSettings,
+	McpConfigInfo,
+	SessionState,
+	SkillSummary,
+} from "../shared/types";
+import { AcpClient, normalizeSessionState } from "./core/acp/client";
 import {
-	AcpClient,
-	type AcpEvent,
-	type ApprovalMode,
-	type AuditEntry,
-	type ChatMessage,
-	type ContentBlock,
-	type ContextPart,
-	type ContextReport,
-	type DesktopSettings,
-	type McpConfigInfo,
-	type SessionState,
-	type SkillSummary,
-	normalizeSessionState,
-} from "./acp-client";
+	chipBeforeCaret,
+	chipFromEventTarget,
+	focusEditor,
+	getEditorRange,
+	insertResourceChip,
+	insertSkillChip,
+	insertTextAtCursor,
+	readDraft,
+	readEditorText,
+	readSkillChips,
+	removeChip,
+} from "./core/composer/editor";
+import { parseContextReport } from "./core/context-report";
 import { DEFAULT_DOCS, type DocFile } from "./docs";
+import {
+	dirName,
+	formatContext,
+	formatDuration,
+	formatTokens,
+	pickLabel,
+	relativeTime,
+	shortPath,
+} from "./core/format";
+import {
+	APPROVAL_HINT,
+	APPROVAL_LABEL,
+	APPROVAL_OPTIONS,
+	MODE_LABEL,
+	THINKING_LABEL,
+	TOOL_KIND_LABEL,
+} from "./core/labels";
+import {
+	extractPathsFromMessages,
+	extractUrlsFromMessages,
+	urlLabel,
+	type ResourceCandidate,
+} from "./core/resources";
+import { detectSensitive } from "./core/security/sensitive";
+import { extractText, formatToolInput } from "./core/tool-input";
 import { SettingsPanel } from "./SettingsPanel";
 import { SkillsPanel } from "./SkillsPanel";
 
@@ -94,266 +132,6 @@ type IconName =
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
-function shortPath(path: string) {
-	const parts = path.replace(/\\/g, "/").split("/").filter(Boolean);
-	return parts.slice(-2).join("/") || "工作目录";
-}
-
-function dirName(path: string) {
-	const parts = path.replace(/\\/g, "/").split("/").filter(Boolean);
-	return parts[parts.length - 1] || "工作目录";
-}
-
-/**
- * 发送前的敏感信息体检。只做本地正则匹配，不外发任何内容；
- * 命中后由用户决定是否仍然发送，避免把密钥贴进对话。
- */
-const SENSITIVE_PATTERNS: Array<{ label: string; re: RegExp }> = [
-	{ label: "私钥文件内容", re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
-	{ label: "GitHub Token", re: /\bgh[pousr]_[A-Za-z0-9]{20,}\b/ },
-	{ label: "云厂商 AccessKey", re: /\bAKIA[0-9A-Z]{16}\b/ },
-	{ label: "API Key", re: /\b(?:sk|pk|ak)-[A-Za-z0-9_-]{16,}\b/ },
-	{
-		label: "口令 / 密钥字段",
-		re: /(api[_-]?key|secret[_-]?key|access[_-]?token|password|passwd|pwd)\s*[:=：]\s*\S{8,}/i,
-	},
-];
-
-function detectSensitive(text: string): string | null {
-	for (const pattern of SENSITIVE_PATTERNS) {
-		if (pattern.re.test(text)) return pattern.label;
-	}
-	return null;
-}
-
-function relativeTime(ts?: number) {
-	if (!ts) return "";
-	const diff = Date.now() - ts;
-	const minute = 60_000;
-	const hour = 60 * minute;
-	const day = 24 * hour;
-	if (diff < minute) return "刚刚";
-	if (diff < hour) return `${Math.floor(diff / minute)}分钟前`;
-	if (diff < day) return `${Math.floor(diff / hour)}小时前`;
-	if (diff < 7 * day) return `${Math.floor(diff / day)}天前`;
-	return new Date(ts).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
-}
-
-function formatDuration(ms?: number) {
-	if (ms === undefined) return "";
-	const seconds = Math.max(0, Math.floor(ms / 1000));
-	if (seconds < 60) return `${seconds}秒`;
-	const minutes = Math.floor(seconds / 60);
-	return `${minutes}分${seconds % 60}秒`;
-}
-
-/** 思考强度 / 运行模式的展示文案，取值来自 ACP，未知值原样显示 */
-const THINKING_LABEL: Record<string, string> = {
-	off: "关闭",
-	none: "关闭",
-	auto: "自动",
-	minimal: "极低",
-	low: "低",
-	medium: "中",
-	high: "高",
-	xhigh: "很高",
-	max: "最大",
-};
-
-const MODE_LABEL: Record<string, string> = {
-	default: "默认",
-	plan: "规划",
-	accept_edits: "自动编辑",
-	read_only: "只读",
-};
-
-function pickLabel(map: Record<string, string>, value?: string, fallback?: string) {
-	if (value && map[value]) return map[value];
-	return fallback || value || "";
-}
-
-/** 上下文窗口按 1.0M / 288K 展示 */
-function formatContext(tokens: number) {
-	if (tokens >= 1_000_000) {
-		const millions = tokens / 1_000_000;
-		return `${Number.isInteger(millions) ? millions : millions.toFixed(1)}M`;
-	}
-	return `${Math.round(tokens / 1000)}K`;
-}
-
-/** 精确到 0.1K 的 token 展示，用于「已使用 191.4K」这类文案 */
-function formatTokens(tokens: number) {
-	if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M`;
-	if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}K`;
-	return String(Math.round(tokens));
-}
-
-const APPROVAL_LABEL: Record<ApprovalMode, string> = {
-	yolo: "完全允许",
-	write: "仅写入确认",
-	"always-ask-cached": "询问并记住",
-	"always-ask": "每次询问",
-};
-
-const APPROVAL_HINT: Record<ApprovalMode, string> = {
-	yolo: "所有工具调用直接执行，不再确认",
-	write: "读取自动通过，写文件与执行命令前确认",
-	"always-ask-cached": "文件读取也需要确认，确认后可记住该路径",
-	"always-ask": "仅只读工具自动通过，其它每次都要确认",
-};
-
-const APPROVAL_OPTIONS: ApprovalMode[] = ["yolo", "write", "always-ask-cached", "always-ask"];
-
-/** 光标前正在输入的技能指令：/name 或 /skill:name（omp 实际识别的写法） */
-const SKILL_TOKEN_RE = /(?:^|\s)\/(?:skill:)?([\w-]*)$/;
-/** 光标前正在输入的资源引用：@关键字；Win 路径含空格，关键字阶段只匹配非空白 */
-const RESOURCE_TOKEN_RE = /(?:^|\s)@([^\s@]*)$/;
-/** contenteditable 中 inline chip 的标记属性；DOM 即内容真相源 */
-const SKILL_CHIP_ATTR = "data-skill";
-const RESOURCE_CHIP_ATTR = "data-resource";
-/** 两种 chip 共用的删除判定 */
-const CHIP_ATTRS = [SKILL_CHIP_ATTR, RESOURCE_CHIP_ATTR] as const;
-
-interface ResourceCandidate {
-	/** 发送到 omp 的真实文本：文件为 @path（含空格加引号），网址为裸 URL */
-	value: string;
-	/** chip 上显示的名字：文件名或域名 */
-	label: string;
-	/** 联想面板的来源分类 */
-	group: "对话中的文件" | "对话中的资源" | "网址";
-	detail: string;
-}
-
-/** 从工具调用参数/标题里抽取真实出现过的文件路径（不是臆造的候选） */
-function extractPathsFromMessages(messages: ChatMessage[]): string[] {
-	const paths = new Set<string>();
-	const push = (value: unknown) => {
-		if (typeof value !== "string") return;
-		// 常见字段：path/filePath/file_path；兼容整段参数里出现的绝对路径
-		const matches = value.match(/(?:[A-Za-z]:[\\/][^\s"',;}\]]+|(?:\.{0,2}\/|~\/)[\w./-]+)/g);
-		for (const item of matches ?? []) {
-			const clean = item.replace(/[)\]}>]+$/, "");
-			if (clean.length > 3) paths.add(clean);
-		}
-	};
-	for (const message of messages) {
-		for (const block of message.blocks) {
-			if (block.type !== "tool_call" && block.type !== "tool_result") continue;
-			push(block.title);
-			push(block.rawInput);
-			push(block.result);
-		}
-	}
-	return [...paths];
-}
-
-/** 从对话文本里抽取真实出现过的网址 */
-function extractUrlsFromMessages(messages: ChatMessage[]): string[] {
-	const urls = new Set<string>();
-	for (const message of messages) {
-		for (const block of message.blocks) {
-			if (block.type !== "text" && block.type !== "tool_result") continue;
-			for (const match of block.text.match(/https?:\/\/[^\s<>"')\]}]+/g) ?? []) {
-				urls.add(match.replace(/[.,;:]+$/, ""));
-			}
-		}
-	}
-	return [...urls];
-}
-
-const urlLabel = (url: string) => {
-	try {
-		return new URL(url).hostname;
-	} catch {
-		return url.length > 28 ? `${url.slice(0, 28)}…` : url;
-	}
-};
-
-/** 把联想草稿（@xxx 或 /xxx）从光标前的文本节点里删掉，避免 chip 与文本重复 */
-function dropDraftBeforeCursor(range: Range, tokenRe: RegExp) {
-	let node = range.startContainer;
-	let offset = range.startOffset;
-	// 光标可能停在 contenteditable 容器本身（如点击联想项后），此时取前一个文本节点的末尾
-	if (node.nodeType === Node.ELEMENT_NODE && offset > 0) {
-		const previous = node.childNodes[offset - 1];
-		if (previous?.nodeType === Node.TEXT_NODE) {
-			node = previous;
-			offset = previous.textContent?.length ?? 0;
-		}
-	}
-	if (node.nodeType !== Node.TEXT_NODE || offset === 0) return;
-	const match = (node.textContent ?? "").slice(0, offset).match(tokenRe);
-	if (!match) return;
-	const start = offset - match[0].length;
-	const drop = document.createRange();
-	drop.setStart(node, start);
-	drop.setEnd(node, offset);
-	drop.deleteContents();
-	range.setStart(node, start);
-	range.collapse(true);
-}
-
-/** omp `/context` 输出里的分段名称 → 中文 */
-const CONTEXT_PART_LABEL: Record<string, string> = {
-	"system prompt": "系统提示词",
-	"system tools": "工具",
-	"system context": "系统上下文",
-	"instruction files": "指令文件",
-	skills: "技能",
-	messages: "对话消息",
-	"tool output": "工具输出",
-	"auto-compact buf": "自动压缩预留",
-	free: "空闲",
-};
-
-/** 分段条配色，按出现顺序取用；与图例圆点共用 */
-const CONTEXT_PART_COLORS = ["#6d5efc", "#12b981", "#f59e0b", "#8b5cf6", "#ec4899", "#0ea5e9"];
-
-/**
- * 解析 omp `/context` 的纯文本输出，例如：
- *   Context window: 1032192 tokens (16% used)
- *     System prompt    [░░░] 0%  1731 tokens
- * 官方没有提供结构化字段，这里只做格式解析，数值全部来自 omp 自身统计。
- */
-function parseContextReport(text: string): ContextReport | null {
-	if (!text.includes("Context window")) return null;
-	const windowMatch = text.match(/Context window:\s*([\d,]+)\s*tokens/i);
-	if (!windowMatch) return null;
-	const contextWindow = Number(windowMatch[1].replace(/,/g, ""));
-	if (!contextWindow) return null;
-
-	const parts: ContextPart[] = [];
-	let reservedTokens = 0;
-	for (const line of text.split("\n")) {
-		const match = line.match(/^\s+(.+?)\s+\[[^\]]*\]\s*\d+%\s+([\d,]+)\s+tokens\s*$/);
-		if (!match) continue;
-		const rawName = match[1].trim();
-		const key = rawName.toLowerCase();
-		const tokens = Number(match[2].replace(/,/g, ""));
-		if (key === "free") continue;
-		if (key === "auto-compact buf") {
-			reservedTokens = tokens;
-			continue;
-		}
-		parts.push({
-			key,
-			label: CONTEXT_PART_LABEL[key] || rawName,
-			tokens,
-			percent: (tokens / contextWindow) * 100,
-		});
-	}
-	if (!parts.length) return null;
-
-	const usedTokens = parts.reduce((sum, part) => sum + part.tokens, 0);
-	return {
-		contextWindow,
-		usedTokens,
-		percent: (usedTokens / contextWindow) * 100,
-		parts,
-		reservedTokens,
-	};
-}
-
 interface ModelRowOption {
 	value: string;
 	label: string;
@@ -366,27 +144,6 @@ interface ModelRow {
 	currentValue?: string;
 	options?: ModelRowOption[];
 	onSelect?: (value: string) => void;
-}
-
-function extractText(value: unknown): string {
-	if (typeof value === "string") return value;
-	if (Array.isArray(value)) return value.map(extractText).filter(Boolean).join("");
-	if (value && typeof value === "object") {
-		const obj = value as Record<string, unknown>;
-		if (typeof obj.text === "string") return obj.text;
-		if (obj.content !== undefined) return extractText(obj.content);
-	}
-	return "";
-}
-
-function formatToolInput(raw: unknown): string {
-	if (raw === undefined || raw === null) return "";
-	if (typeof raw === "string") return raw;
-	try {
-		return JSON.stringify(raw, null, 2);
-	} catch {
-		return String(raw);
-	}
 }
 
 function Icon({
@@ -887,19 +644,6 @@ const TOOL_STATUS: Record<string, { label: string; icon: IconName }> = {
 	failed: { label: "失败", icon: "warning" },
 };
 
-const TOOL_KIND_LABEL: Record<string, string> = {
-	read: "读取文件",
-	edit: "编辑文件",
-	delete: "删除文件",
-	move: "移动文件",
-	search: "搜索",
-	execute: "运行命令",
-	think: "思考",
-	fetch: "获取内容",
-	switch_mode: "切换模式",
-	other: "工具调用",
-};
-
 function toolLabel(block: ContentBlock): string {
 	if (block.kind && TOOL_KIND_LABEL[block.kind]) return TOOL_KIND_LABEL[block.kind];
 	const name = (block.toolName || "").toLowerCase();
@@ -1056,6 +800,9 @@ function ContextRing({ percent, size = 17 }: { percent: number; size?: number })
 }
 
 /** 上下文分段条 + 图例，数值全部来自 omp `/context` */
+/** 分段条配色，按出现顺序取用；与图例圆点共用 */
+const CONTEXT_PART_COLORS = ["#6d5efc", "#12b981", "#f59e0b", "#8b5cf6", "#ec4899", "#0ea5e9"];
+
 function ContextMeter({ report }: { report: ContextReport }) {
 	const parts: Array<ContextPart & { color: string }> = report.parts.map((part, index) => ({
 		...part,
@@ -1533,179 +1280,45 @@ export function App() {
 	}, [settings.fontScale]);
 
 	// ---------- 非受控 contenteditable 输入区 ----------
-	// chip 直接嵌在文本流里，文字会围绕它换行；React 只在 chip 增删/发送后同步 state，不回写 innerHTML
-	const readEditorText = (): string => {
-		const el = editorRef.current;
-		if (!el) return "";
-		let out = "";
-		const walk = (node: Node) => {
-			if (node.nodeType === Node.TEXT_NODE) {
-				out += node.textContent ?? "";
-				return;
-			}
-			if (node.nodeType !== Node.ELEMENT_NODE) return;
-			const elem = node as HTMLElement;
-			const skill = elem.getAttribute(SKILL_CHIP_ATTR);
-			if (skill) {
-				out += `/skill:${skill}`;
-				return;
-			}
-			const resource = elem.getAttribute(RESOURCE_CHIP_ATTR);
-			if (resource) {
-				out += resource;
-				return;
-			}
-			if (elem.tagName === "BR") {
-				out += "\n";
-				return;
-			}
-			if ((elem.tagName === "DIV" || elem.tagName === "P") && out && !out.endsWith("\n")) {
-				out += "\n";
-			}
-			elem.childNodes.forEach(walk);
-		};
-		el.childNodes.forEach(walk);
-		return out;
+	// DOM 操作全部在 core/composer/editor.ts；这里只负责把 DOM 结果同步到 React state。
+	const editor = {
+		text: () => readEditorText(editorRef.current),
+		chips: () => readSkillChips(editorRef.current),
+		range: () => getEditorRange(editorRef.current),
+		focus: () => focusEditor(editorRef.current),
+		insertText: (text: string) => insertTextAtCursor(editorRef.current, text),
+		insertSkill: (name: string) => insertSkillChip(editorRef.current, name),
+		insertResource: (candidate: ResourceCandidate) =>
+			insertResourceChip(editorRef.current, candidate),
+		remove: (chip: HTMLElement) => removeChip(editorRef.current, chip),
+		clear: () => {
+			if (editorRef.current) editorRef.current.innerHTML = "";
+		},
 	};
 
 	const syncFromEditor = () => {
-		const el = editorRef.current;
-		if (!el) return;
-		const chips: string[] = [];
-		el.querySelectorAll(`[${SKILL_CHIP_ATTR}]`).forEach((node) => {
-			const name = node.getAttribute(SKILL_CHIP_ATTR);
-			if (name && !chips.includes(name)) chips.push(name);
-		});
-		setInput(readEditorText());
-		setSkillChips(chips);
+		setInput(editor.text());
+		setSkillChips(editor.chips());
 	};
 
-	const getEditorRange = (): Range | null => {
-		const el = editorRef.current;
-		const sel = window.getSelection();
-		if (!el || !sel || sel.rangeCount === 0) return null;
-		const range = sel.getRangeAt(0);
-		if (!el.contains(range.startContainer)) return null;
-		return range;
-	};
-
-	const focusEditor = () => {
-		const el = editorRef.current;
-		if (!el) return;
-		el.focus();
-		const sel = window.getSelection();
-		const range = document.createRange();
-		range.selectNodeContents(el);
-		range.collapse(false);
-		sel?.removeAllRanges();
-		sel?.addRange(range);
-	};
-
-	const insertTextAtCursor = (text: string) => {
-		const range = getEditorRange();
-		if (!range) return;
-		range.deleteContents();
-		const node = document.createTextNode(text);
-		range.insertNode(node);
-		range.setStartAfter(node);
-		range.collapse(true);
-		const sel = window.getSelection();
-		sel?.removeAllRanges();
-		sel?.addRange(range);
-	};
-
-	const insertSkillChip = (name: string) => {
-		const range = getEditorRange();
-		if (!range) return;
-		// 光标前正在输入的 /xxx 只是联想草稿，先删掉，避免 chip 与纯文本重复
-		dropDraftBeforeCursor(range, SKILL_TOKEN_RE);
-		const chip = document.createElement("span");
-		chip.className = "omp-skill-chip";
-		chip.setAttribute("contenteditable", "false");
-		chip.setAttribute(SKILL_CHIP_ATTR, name);
-		chip.title = `技能 ${name} · × 或 Backspace 删除`;
-		const remove = document.createElement("span");
-		remove.className = "omp-skill-chip-remove";
-		remove.setAttribute("contenteditable", "false");
-		remove.textContent = "×";
-		const label = document.createElement("span");
-		label.textContent = name;
-		chip.append(remove, label);
-		// 尾随空格既是与后文的间隔，也是光标锚点
-		const tail = document.createTextNode(" ");
-		const fragment = document.createDocumentFragment();
-		fragment.append(chip, tail);
-		range.insertNode(fragment);
-		range.setStartAfter(tail);
-		range.collapse(true);
-		const sel = window.getSelection();
-		sel?.removeAllRanges();
-		sel?.addRange(range);
-	};
-
-	const removeChip = (chip: HTMLElement) => {
-		const blank = chip.nextSibling;
-		if (blank?.nodeType === Node.TEXT_NODE && (blank.textContent ?? "").trim() === "") {
-			blank.parentNode?.removeChild(blank);
-		}
-		chip.remove();
-		syncFromEditor();
-	};
-
-	const insertResourceChip = (candidate: ResourceCandidate) => {
-		if (!getEditorRange()) focusEditor();
-		const range = getEditorRange();
-		if (!range) return;
-		dropDraftBeforeCursor(range, RESOURCE_TOKEN_RE);
-		const chip = document.createElement("span");
-		chip.className = "omp-resource-chip";
-		chip.setAttribute("contenteditable", "false");
-		chip.setAttribute(RESOURCE_CHIP_ATTR, candidate.value);
-		chip.title = `${candidate.group}：${candidate.detail} · × 或 Backspace 删除`;
-		const remove = document.createElement("span");
-		remove.className = "omp-skill-chip-remove";
-		remove.setAttribute("contenteditable", "false");
-		remove.textContent = "×";
-		const label = document.createElement("span");
-		label.textContent = candidate.label;
-		chip.append(remove, label);
-		const tail = document.createTextNode(" ");
-		const fragment = document.createDocumentFragment();
-		fragment.append(chip, tail);
-		range.insertNode(fragment);
-		range.setStartAfter(tail);
-		range.collapse(true);
-		const sel = window.getSelection();
-		sel?.removeAllRanges();
-		sel?.addRange(range);
+	const applyResource = (candidate: ResourceCandidate) => {
+		editor.insertResource(candidate);
 		setResourceSuggestOpen(false);
 		setResourceQuery("");
 		syncFromEditor();
-		editorRef.current?.focus();
+		editor.focus();
 	};
 
 	const onEditorInput = () => {
 		if (composingRef.current) return;
 		syncFromEditor();
-		const range = getEditorRange();
-		if (!range) {
-			setSkillSuggestOpen(false);
-			setResourceSuggestOpen(false);
-			return;
-		}
-		const node = range.startContainer;
-		const before =
-			node.nodeType === Node.TEXT_NODE && range.startOffset > 0
-				? (node.textContent ?? "").slice(0, range.startOffset)
-				: (node.textContent ?? "");
-		const skillMatch = before.match(SKILL_TOKEN_RE);
-		const resourceMatch = before.match(RESOURCE_TOKEN_RE);
+		const draft = readDraft(editor.range());
 		// @ 优先：@ 里可能出现的 / 不应被当成技能指令
-		setResourceSuggestOpen(Boolean(resourceMatch));
-		setResourceQuery(resourceMatch?.[1] ?? "");
+		setResourceSuggestOpen(draft.resource !== null);
+		setResourceQuery(draft.resource ?? "");
 		setResourceActive(0);
-		setSkillSuggestOpen(Boolean(skillMatch) && !resourceMatch);
-		setSkillQuery(skillMatch?.[1] ?? "");
+		setSkillSuggestOpen(draft.skill !== null);
+		setSkillQuery(draft.skill ?? "");
 		setSkillActive(0);
 	};
 
@@ -1714,19 +1327,17 @@ export function App() {
 		const inputType = (event.nativeEvent as InputEvent).inputType;
 		if (inputType === "insertParagraph" || inputType === "insertLineBreak") {
 			event.preventDefault();
-			insertTextAtCursor("\n");
+			editor.insertText("\n");
 			syncFromEditor();
 		}
 	};
 
 	const onEditorMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
-		const target = event.target as HTMLElement;
-		const removeButton = target.closest(".omp-skill-chip-remove");
-		if (!removeButton) return;
+		const chip = chipFromEventTarget(event.target as HTMLElement);
+		if (!chip) return;
 		event.preventDefault();
-		const selector = CHIP_ATTRS.map((attr) => `[${attr}]`).join(",");
-		const chip = removeButton.closest(selector);
-		if (chip instanceof HTMLElement) removeChip(chip);
+		editor.remove(chip);
+		syncFromEditor();
 	};
 
 	const onEditorKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -1746,7 +1357,7 @@ export function App() {
 			if (event.key === "Enter" || event.key === "Tab") {
 				event.preventDefault();
 				const chosen = resourceCandidates[resourceActive];
-				if (chosen) insertResourceChip(chosen);
+				if (chosen) applyResource(chosen);
 				return;
 			}
 			if (event.key === "Escape") {
@@ -1781,28 +1392,14 @@ export function App() {
 			}
 		}
 		if (event.key === "Backspace") {
-			const range = getEditorRange();
-			if (range?.collapsed) {
-				const node = range.startContainer;
-				let chip: Node | null = null;
-				let blank: Node | null = null;
-				if (node.nodeType === Node.TEXT_NODE) {
-					if (range.startOffset === 0) {
-						chip = node.previousSibling;
-					} else if (range.startOffset <= 1 && !(node.textContent ?? "").trim()) {
-						// 光标在 chip 尾随空格里：一次 Backspace 连空格带 chip 删掉
-						chip = node.previousSibling;
-						blank = node;
-					}
-				} else {
-					chip = node.childNodes[range.startOffset - 1] ?? null;
-				}
-				if (chip instanceof HTMLElement && CHIP_ATTRS.some((attr) => chip.hasAttribute(attr))) {
-					event.preventDefault();
-					if (blank) blank.parentNode?.removeChild(blank);
-					removeChip(chip);
-					return;
-				}
+			const range = editor.range();
+			const hit = range ? chipBeforeCaret(range) : null;
+			if (hit) {
+				event.preventDefault();
+				if (hit.blank) hit.blank.parentNode?.removeChild(hit.blank);
+				editor.remove(hit.chip);
+				syncFromEditor();
+				return;
 			}
 		}
 		if (event.key === "Enter" && !event.shiftKey) {
@@ -2264,7 +1861,7 @@ export function App() {
 
 	const send = async (override?: string, confirmed = false) => {
 		// inline chip 已在 readEditorText 里还原成 omp 认识的 /skill:<name>；重试走 override 不再读输入区
-		const text = (override ?? readEditorText()).trim();
+		const text = (override ?? editor.text()).trim();
 		// 正在刷新上下文用量时先让出，避免两个 prompt 并发打到同一会话
 		if (!client || !activeId || !text || running || contextBusyRef.current) return;
 		if (!confirmed && settings.sensitiveGuard) {
@@ -2330,7 +1927,7 @@ export function App() {
 			});
 			runningRef.current = false;
 			setRunning(false);
-			focusEditor();
+			editor.focus();
 			// 一轮结束后刷新上下文占用（工具输出、消息都会变化）
 			void probeContext(sessionId);
 		}
@@ -2506,7 +2103,7 @@ export function App() {
 		try {
 			const file = await window.desktop.files.open();
 			if (!file) return;
-			insertResourceChip({
+			applyResource({
 				value: file.path.includes(" ") ? `@"${file.path}"` : `@${file.path}`,
 				label: file.name,
 				group: "对话中的文件",
@@ -2518,19 +2115,19 @@ export function App() {
 	};
 
 	const applySkill = (name: string) => {
-		if (!getEditorRange()) focusEditor();
-		insertSkillChip(name);
+		if (!editor.range()) editor.focus();
+		editor.insertSkill(name);
 		setSkillSuggestOpen(false);
 		setSkillQuery("");
 		syncFromEditor();
-		editorRef.current?.focus();
+		editor.focus();
 	};
 
 	const openResourceSuggest = () => {
-		if (!getEditorRange()) focusEditor();
-		insertTextAtCursor("@");
+		if (!editor.range()) editor.focus();
+		editor.insertText("@");
 		onEditorInput();
-		editorRef.current?.focus();
+		editor.focus();
 	};
 
 	const reloadDoc = async () => {
@@ -2999,10 +2596,10 @@ export function App() {
 															key={hint}
 															type="button"
 															onClick={() => {
-																if (!getEditorRange()) focusEditor();
-																insertTextAtCursor(hint);
+																if (!editor.range()) editor.focus();
+																editor.insertText(hint);
 																syncFromEditor();
-																editorRef.current?.focus();
+																editor.focus();
 															}}
 														>
 															{hint}
@@ -3172,7 +2769,7 @@ export function App() {
 															index === resourceActive ? "active" : ""
 														}`}
 														onMouseEnter={() => setResourceActive(index)}
-														onClick={() => insertResourceChip(candidate)}
+														onClick={() => applyResource(candidate)}
 													>
 														<span className="omp-skill-suggest-icon">
 															{candidate.group === "网址" ? (

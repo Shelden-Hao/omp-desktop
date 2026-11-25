@@ -4,7 +4,7 @@
  * 启停通过 omp 的 skills.ignoredSkills 配置，不在外壳侧另造状态。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { SkillPathsData, SkillScope, SkillSearchData, SkillSummary } from "./acp-client";
+import type { SkillPathsData, SkillScope, SkillSearchData, SkillSummary } from "../shared/types";
 
 type Tab = "installed" | "market";
 type Sort = "relevance" | "downloads" | "recent";
