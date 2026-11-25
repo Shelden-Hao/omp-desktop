@@ -320,6 +320,8 @@ export function SettingsPanel({ settings, onClose, onSave }: SettingsPanelProps)
 	const [editor, setEditor] = useState<ModelInputData | null>(null);
 	const [saving, setSaving] = useState(false);
 	const bodyRef = useRef<HTMLDivElement | null>(null);
+	/** 点击导航后短暂屏蔽滚动联动，否则 scrollIntoView 触发的 scroll 会立刻把选中项改回上一节 */
+	const navLockRef = useRef(0);
 
 	const refreshAudit = useCallback(() => {
 		void window.desktop.audit
@@ -365,14 +367,21 @@ export function SettingsPanel({ settings, onClose, onSave }: SettingsPanelProps)
 	const onScroll = () => {
 		const container = bodyRef.current;
 		if (!container) return;
+		if (Date.now() < navLockRef.current) return;
+		const items = visibleNav.flatMap((group) => group.items);
+		if (!items.length) return;
+		// 滚到底时最后一节露不全，只能按「最后一项」判定，否则永远高亮倒数第二项
+		if (container.scrollTop + container.clientHeight >= container.scrollHeight - 8) {
+			const last = items[items.length - 1];
+			if (activeNav !== last.id) setActiveNav(last.id);
+			return;
+		}
 		const top = container.getBoundingClientRect().top + 12;
 		let current = activeNav;
-		for (const group of NAV) {
-			for (const item of group.items) {
-				const node = document.getElementById(`omp-settings-${item.id}`);
-				if (!node) continue;
-				if (node.getBoundingClientRect().top <= top) current = item.id;
-			}
+		for (const item of items) {
+			const node = document.getElementById(`omp-settings-${item.id}`);
+			if (!node) continue;
+			if (node.getBoundingClientRect().top <= top) current = item.id;
 		}
 		if (current !== activeNav) setActiveNav(current);
 	};
@@ -505,6 +514,7 @@ export function SettingsPanel({ settings, onClose, onSave }: SettingsPanelProps)
 										className={activeNav === item.id ? "active" : ""}
 										onClick={() => {
 											setActiveNav(item.id);
+											navLockRef.current = Date.now() + 500;
 											navTo(item.id);
 										}}
 									>
@@ -635,6 +645,44 @@ export function SettingsPanel({ settings, onClose, onSave }: SettingsPanelProps)
 										<span>{Math.round(draft.fontScale * 100)}%</span>
 									</div>
 								</Row>
+							</div>
+						</section>
+
+						<section id="omp-settings-storage" className="omp-settings-section">
+							<div className="omp-settings-card">
+								<div className="omp-set-storage">
+									<div className="omp-set-row-text">
+										<div className="omp-set-row-title">系统缓存目录</div>
+										<p className="omp-set-row-desc" title={systemInfo?.cacheDir}>
+											{systemInfo?.cacheDir || "读取中…"}
+										</p>
+									</div>
+									<button type="button" onClick={() => void openCache()}>
+										打开目录
+									</button>
+								</div>
+								{systemInfo && (
+									<div className="omp-set-disk">
+										<div className="omp-set-disk-bar">
+											<span style={{ width: `${usedPercent}%` }} />
+										</div>
+										<div className="omp-set-disk-legend">
+											<span>磁盘已用 {formatBytes(systemInfo.usedBytes)}</span>
+											<span>可用 {formatBytes(systemInfo.availableBytes)}</span>
+											<span>共 {formatBytes(systemInfo.totalBytes)}</span>
+										</div>
+									</div>
+								)}
+								<div className="omp-set-storage">
+									<div className="omp-set-row-text">
+										<div className="omp-set-row-title">omp 默认工作空间</div>
+										<p className="omp-set-row-desc">新任务默认在该路径下运行，不影响已有会话。</p>
+										<input className="omp-set-path" value={draft.cwd} readOnly title={draft.cwd} />
+									</div>
+									<button type="button" onClick={() => void pickWorkspace()}>
+										更改
+									</button>
+								</div>
 							</div>
 						</section>
 
@@ -1139,44 +1187,6 @@ export function SettingsPanel({ settings, onClose, onSave }: SettingsPanelProps)
 									{audit.length === 0 && (
 										<p className="omp-set-empty">暂无记录，发起一次对话后会出现工具调用审计。</p>
 									)}
-								</div>
-							</div>
-						</section>
-
-						<section id="omp-settings-storage" className="omp-settings-section">
-							<div className="omp-settings-card">
-								<div className="omp-set-storage">
-									<div className="omp-set-row-text">
-										<div className="omp-set-row-title">系统缓存目录</div>
-										<p className="omp-set-row-desc" title={systemInfo?.cacheDir}>
-											{systemInfo?.cacheDir || "读取中…"}
-										</p>
-									</div>
-									<button type="button" onClick={() => void openCache()}>
-										打开目录
-									</button>
-								</div>
-								{systemInfo && (
-									<div className="omp-set-disk">
-										<div className="omp-set-disk-bar">
-											<span style={{ width: `${usedPercent}%` }} />
-										</div>
-										<div className="omp-set-disk-legend">
-											<span>磁盘已用 {formatBytes(systemInfo.usedBytes)}</span>
-											<span>可用 {formatBytes(systemInfo.availableBytes)}</span>
-											<span>共 {formatBytes(systemInfo.totalBytes)}</span>
-										</div>
-									</div>
-								)}
-								<div className="omp-set-storage">
-									<div className="omp-set-row-text">
-										<div className="omp-set-row-title">omp 默认工作空间</div>
-										<p className="omp-set-row-desc">新任务默认在该路径下运行，不影响已有会话。</p>
-										<input className="omp-set-path" value={draft.cwd} readOnly title={draft.cwd} />
-									</div>
-									<button type="button" onClick={() => void pickWorkspace()}>
-										更改
-									</button>
 								</div>
 							</div>
 						</section>
