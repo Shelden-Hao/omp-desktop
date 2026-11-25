@@ -43,8 +43,9 @@ src/
 ├── preload/                    # 唯一的跨进程出口，只转发、不含业务逻辑
 │
 └── renderer/                   # React 渲染层
-    ├── App.tsx                 # 组合根：装配状态与布局，不放解析/格式化逻辑
-    ├── core/                   # 与 React 无关的纯逻辑，可单测
+    ├── App.tsx                 # 组合根：界面状态 + 布局装配，不放解析/格式化逻辑
+    ├── hooks/                  # 状态编排：连接、消息、发送、输入区；只出句柄不写 JSX
+    ├── core/                   # 与 React 无关的纯逻辑，可单测（含 ACP 事件路由与归约）
     ├── panels/                 # 整块业务面板（容器）：自己取数据、自己管状态
     ├── components/             # 纯展示组件，按界面区域分组
     └── styles/                 # 按域拆分的样式与设计变量
@@ -65,22 +66,24 @@ bootstrap  →  ipc  →  services  →  platform
 ### 渲染层内部分层
 
 ```
-App.tsx  →  components/*  →  core/*
-（装配）     （展示）        （纯逻辑）
+App.tsx  →  hooks/*  →  components/*  →  core/*
+（装配）     （状态编排）  （展示）         （纯逻辑）
 ```
 
-- `core/*`：Markdown 解析、时间/容量格式化、敏感信息检测、`/context` 解析、contenteditable 编辑器操作。全部是无状态函数或纯类，不 import React。
+- `core/*`：Markdown 解析、时间/容量格式化、敏感信息检测、`/context` 解析、contenteditable 编辑器操作、ACP 事件路由（`acp/event-router.ts`）与状态归约（`session-reducer.ts`、`acp/apply-effect.ts`、`session-boot.ts`）。全部是无状态函数或纯类，不 import React。
+- `hooks/*`：连接生命周期、消息仓库、发送链路、输入区、滚动与搜索。只暴露状态与句柄，不写 JSX；跨界面复用的规则仍下沉到 `core/`。
 - `components/*`：接收 props 渲染，自己不发 IPC、不读全局设置；需要数据的从上层传入。
-- `App.tsx`：只保留跨区域状态（会话、连接、当前任务）与布局；单个面板的内部状态放在该面板里。
+- `App.tsx`：只保留界面状态（浮层开关、筛选、预览栏）与布局装配；会话与消息由 `hooks/` 提供。
 
 ### 一次改动的落位判断
 
 1. 是主进程与界面都要用的类型？→ `shared/types/`。
 2. 是系统 API（电源、代理、注册表、文件对话框）？→ `main/platform/`。
 3. 是业务流程（保存设置要同时写本地与 omp 配置）？→ `main/services/`。
-4. 是纯计算（解析、格式化、校验）？→ `renderer/core/`。
-5. 是一块界面的像素？→ `renderer/components/<区域>/`。
-6. 只有到这一步还放不下，才写进 `App.tsx`。
+4. 是纯计算（解析、格式化、校验、事件归约）？→ `renderer/core/`。
+5. 是「一组状态 + 副作用」？→ `renderer/hooks/`。
+6. 是一块界面的像素？→ `renderer/components/<区域>/`。
+7. 只有到这一步还放不下，才写进 `App.tsx`。
 
 ### 协议
 

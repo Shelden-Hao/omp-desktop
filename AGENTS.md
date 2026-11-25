@@ -39,6 +39,7 @@ renderer/ ← 只依赖 shared + react
 - 单文件超过 400 行先想能不能按概念拆，不要按行数硬切。
 - 新增界面区域时，同时在 `styles/` 里找到对应文件加样式，不要把新规则堆到别的域。
 - 设置页按分页拆：`panels/settings/index.tsx` 管草稿态、数据加载与导航，`panes/*.tsx` 每页只管自己的 `<section>`，跨页共用控件放 `panels/settings/controls.tsx`。
+- 技能页按「数据 / 卡片 / 分页 / 浮层」拆：`panels/skills/use-skills-panel.ts` 管状态与动作，`InstalledTab` 与 `MarketTab` 各管一页布局，`SkillCard` / `SkillDetail` / `SkillDialogs` 只接 props，文案与归一化在 `labels.ts`。
 
 ### 样式文件分工
 
@@ -74,8 +75,23 @@ renderer/ ← 只依赖 shared + react
 
 1. `shared/protocol.ts`：补事件类型。
 2. `renderer/core/acp/client.ts`：只做协议搬运，不写界面逻辑。
-3. 会话状态归约放 `renderer/core/session-reducer.ts`；`App.tsx` 只调用归约结果。
-4. 展示落在 `renderer/components/chat/*`。
+3. `renderer/core/acp/event-router.ts`：把 `session/update` 解析成描述性指令（effect），并在这里决定字段兼容；工具类 RPC 的方法表也在这里。
+4. `renderer/core/acp/apply-effect.ts`：需要派生会话能力态（模式/配置项/用量）时加纯 reducer。
+5. `renderer/hooks/use-agent-connection.ts`：在 `handleEvent` 的 switch 里分发到对应 store 方法；消息类指令走 `useMessageStore`，能力类走 `apply-*`。
+6. 展示落在 `renderer/components/chat/*`。
+
+### 渲染层 hook 的分工
+
+| hook                     | 负责                                                        | 不负责                   |
+| ------------------------ | ----------------------------------------------------------- | ------------------------ |
+| `use-message-store`      | 消息数组读写、工具下标                                      | 网络与协议               |
+| `use-agent-connection`   | ACP 进程生命周期、事件分发、会话索引与历史、`/context` 探测 | 输入区、预览栏、设置面板 |
+| `use-agent-prompt`       | 发送/中断/重试、敏感拦截、失效会话重绑                      | 会话列表维护             |
+| `use-agent-capabilities` | 运行模式、配置项、模型面板行                                | 事件来源                 |
+| `use-composer-editor`    | contenteditable、`@`/`/` 联想、chip                         | 消息发送                 |
+| `use-running-flag`       | `running` 的 state + ref 单一来源                           | 谁把它设为 true          |
+
+连接只在内部 `epoch` 变化时重建（切换安全等级），事件回调通过 ref 调用，不要给连接 effect 增加回调依赖。
 
 ## 命令
 
