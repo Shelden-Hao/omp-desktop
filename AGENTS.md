@@ -8,6 +8,51 @@
 
 核心原则：**外壳只呈现 omp/ACP 真实具备的能力，不硬造没有后端支撑的功能。**
 
+## 目录与分层
+
+四层单向依赖，任何改动先判断属于哪一层，再决定文件位置。
+
+```
+shared/   ← main/ 、preload/ 、renderer/ 都只能向下依赖 shared
+main/     ← 只依赖 shared + electron + node
+preload/  ← 只依赖 shared + electron
+renderer/ ← 只依赖 shared + react
+```
+
+### 硬性约束
+
+- **禁止反向依赖**：`main` 不许 import `renderer`，`renderer` 不许 import `main`，`preload` 不许 import 两边的实现文件。共享内容只能放 `shared/`。
+- **禁止跨层调用**：渲染层不直接用 Node/Electron 能力；需要系统能力就在 `main/ipc` 加通道、在 `shared/bridge.ts` 加签名、在 `preload` 加转发。
+- **`main/ipc/*` 只做通道**：注册 `ipcMain.handle`、收口参数、把异常转成 `{ ok, error }`，不写业务分支。
+- **`main/services/*` 不碰窗口**：不许出现 `ipcMain`、`BrowserWindow`、`webContents`；进程退出、窗口广播这类事由 `ipc` 或 `bootstrap` 负责。
+- **`main/platform/*` 只包系统 API**：`powerSaveBlocker`、`session.setProxy`、`setLoginItemSettings`、`shell.*`、`dialog.*` 一律集中在这里。
+- **`renderer/core/*` 不 import React**：纯函数、纯类，可以被任意组件复用，也可以直接单测。
+- **`renderer/components/*` 不自取数据**：不发 IPC、不读 `settings` 全局，只通过 props 接收数据与回调。
+- **`App.tsx` 只做装配**：不放解析、格式化、正则匹配、DOM 操作；这些属于 `core/`。
+
+### 文件职责
+
+- 一个文件一个概念，文件名说明它是什么：`message-list.tsx` 放消息列表，`markdown.ts` 放解析与渲染组件，不要把两件事塞一起。
+- 展示组件用大驼峰（`ContextMeter.tsx`），纯逻辑模块用小写中划线（`context-report.ts`）。
+- 单文件超过 400 行先想能不能按概念拆，不要按行数硬切。
+- 新增界面区域时，同时在 `styles/` 里找到对应文件加样式，不要把新规则堆到别的域。
+
+### 新增一个设置项的完整路径
+
+1. `shared/types/settings.ts`：加字段与注释。
+2. `main/services/settings-service.ts`：默认值、持久化校验。
+3. 需要系统行为 → `main/platform/`；需要业务编排 → `main/services/`。
+4. 需要暴露给界面 → `main/ipc/*` + `shared/bridge.ts` + `preload`。
+5. `renderer/components/settings/panes/*`：加控件；`settings` 页面导航在 `settings-nav.ts`。
+6. 需要作用到 omp 配置 → `main/services/omp-config-service.ts`。
+
+### 新增一个 ACP 事件的完整路径
+
+1. `shared/protocol.ts`：补事件类型。
+2. `renderer/core/acp/client.ts`：只做协议搬运，不写界面逻辑。
+3. 会话状态归约放 `renderer/core/session-reducer.ts`；`App.tsx` 只调用归约结果。
+4. 展示落在 `renderer/components/chat/*`。
+
 ## 命令
 
 ```bash
