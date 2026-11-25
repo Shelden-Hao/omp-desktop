@@ -1,13 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-
-export interface ModelContextInfo {
-	/** ACP 里的模型值，形如 provider/modelId */
-	value: string;
-	contextWindow?: number;
-	maxTokens?: number;
-}
+import type { ModelContextInfo } from "../../shared/types";
 
 /**
  * omp 的 ACP configOptions 只返回模型名，不返回上下文窗口。

@@ -6,7 +6,13 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve, sep } from "node:path";
-import { proxyEnv } from "./system";
+import type {
+	SkillCommandReply,
+	SkillCreateInput,
+	SkillPathsData,
+	SkillUpdateSummary,
+} from "../../shared/types";
+import { proxyEnv } from "../platform/system";
 
 export interface SkillHostSettings {
 	bunPath: string;
@@ -16,23 +22,8 @@ export interface SkillHostSettings {
 	proxyUrl?: string;
 }
 
-export interface SkillCommandResult {
-	ok: boolean;
-	stdout: string;
-	stderr: string;
-	error?: string;
-}
-
-export interface SkillPaths {
-	userDir: string;
-	projectDir: string;
-}
-
-export interface SkillCreateInput {
-	name: string;
-	description: string;
-	scope: "user" | "project";
-}
+export type SkillCommandResult = SkillCommandReply;
+export type SkillPaths = SkillPathsData;
 
 const NAME_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const COMMAND_TIMEOUT_MS = 60_000;
@@ -296,4 +287,27 @@ export async function createSkill(
 	const body = `---\nname: ${input.name}\ndescription: ${JSON.stringify(description)}\n---\n\n# ${input.name}\n\n在这里写技能内容与操作步骤。\n`;
 	writeFileSync(file, body, "utf8");
 	return { path: file };
+}
+
+/**
+ * 更新 skills.json 中登记过的注册表技能（skills.omp.sh）。
+ * 只调用 `omp skill update -g`：本地手写/agents 目录里的技能没有注册表版本，
+ * 逐个传名字会全部报 "Invalid skill name / not listed"。
+ */
+export async function updateAllInstalledSkills(
+	host: SkillHostSettings,
+): Promise<SkillUpdateSummary> {
+	const summary: SkillUpdateSummary = { updated: 0, failed: 0, errors: [] };
+	const result = await skillCommand(() => runOmpCommand(host, ["skill", "update", "-g", "--yes"]));
+	if (!result.ok) {
+		summary.failed = 1;
+		summary.errors.push(result.error ?? "更新技能失败");
+		return summary;
+	}
+	// 每更新一个技能输出一行：+ @scope/name@1.2.3 或 @scope/name 1.0 → 1.2.3
+	summary.updated = result.stdout
+		.split(/\r?\n/)
+		.map((line) => line.trim())
+		.filter((line) => line.startsWith("+ ") || line.includes("→")).length;
+	return summary;
 }

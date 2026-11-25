@@ -5,14 +5,9 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { app, dialog } from "electron";
+import type { AuditEntry } from "../../shared/types";
 
-export interface AuditEntry {
-	ts: number;
-	category: string;
-	action: string;
-	detail: string;
-	level: "info" | "warn" | "block";
-}
+export type { AuditEntry };
 
 const AUDIT_PATH = join(app.getPath("userData"), "audit.jsonl");
 const MAX_BYTES = 4 * 1024 * 1024;

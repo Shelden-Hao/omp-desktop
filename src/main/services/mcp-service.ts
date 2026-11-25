@@ -1,20 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type { McpConfigInfo, McpServerInfo } from "../../shared/types";
 
 /** omp 内置提供者实际读取的四个 MCP 配置文件位置（见 discovery/builtin.ts）。 */
-export interface McpServerInfo {
-	name: string;
-	scope: "user" | "project";
-	source: string;
-	enabled: boolean;
-	transport: string;
-}
-
-export interface McpConfigInfo {
-	servers: McpServerInfo[];
-	paths: Array<{ scope: "user" | "project"; path: string; exists: boolean }>;
-}
+export type { McpConfigInfo, McpServerInfo };
 
 function readConfig(path: string): Record<string, unknown> {
 	if (!existsSync(path)) return {};

@@ -8,42 +8,14 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { parseDocument } from "yaml";
 
-export interface CustomModelEntry {
-	provider: string;
-	id: string;
-	name: string;
-	baseUrl: string;
-	api: string;
-	apiKey: string;
-	contextWindow?: number;
-	maxTokens?: number;
-	supportsTools: boolean;
-	reasoning: boolean;
-	vision: boolean;
-}
+import type { CustomModelEntry, CustomModelState, ModelInputData } from "../../shared/types";
 
-export interface CustomModelState {
-	path: string;
-	models: CustomModelEntry[];
-	/** omp modelRoles：default / smol / slow / plan */
-	roles: Record<string, string>;
-}
+export type { CustomModelEntry, CustomModelState };
 
-export interface ModelInput {
-	provider: string;
-	id: string;
-	name: string;
-	baseUrl: string;
-	api?: string;
-	apiKey?: string;
-	contextWindow?: number;
-	maxTokens?: number;
-	supportsTools?: boolean;
-	reasoning?: boolean;
-	vision?: boolean;
+export type ModelInput = ModelInputData & {
 	/** 兼容旧 provider 的 apiKey：留空表示沿用已有值 */
 	keepKey?: boolean;
-}
+};
 
 const MODELS_PATH = join(homedir(), ".omp", "agent", "models.yml");
 const DEFAULT_API = "openai-completions";

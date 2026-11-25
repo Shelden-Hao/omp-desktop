@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, statfsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { app, clipboard, dialog, powerSaveBlocker, session, shell } from "electron";
-import type { LinkOpenMode, ProxyMode, RuntimeInfo, SystemInfoData } from "../shared/types";
+import type { LinkOpenMode, ProxyMode, RuntimeInfo, SystemInfoData } from "../../shared/types";
 
 export interface RuntimeSettings {
 	linkOpenMode: LinkOpenMode;
@@ -52,6 +52,62 @@ export async function pickDirectory(): Promise<string | null> {
 	});
 	if (result.canceled) return null;
 	return result.filePaths[0] ?? null;
+}
+
+/** 选择要预览的文本/代码文件；只返回路径，读取与校验交给 workspace-service */
+export async function pickTextFile(): Promise<string | null> {
+	const result = await dialog.showOpenDialog({
+		title: "选择要预览的文件",
+		properties: ["openFile"],
+		filters: [
+			{
+				name: "文本与代码文件",
+				extensions: [
+					"js",
+					"jsx",
+					"mjs",
+					"cjs",
+					"ts",
+					"tsx",
+					"json",
+					"jsonc",
+					"md",
+					"mdx",
+					"css",
+					"scss",
+					"less",
+					"html",
+					"htm",
+					"vue",
+					"py",
+					"rb",
+					"go",
+					"rs",
+					"java",
+					"kt",
+					"c",
+					"h",
+					"cpp",
+					"hpp",
+					"cs",
+					"php",
+					"sh",
+					"bash",
+					"ps1",
+					"yml",
+					"yaml",
+					"toml",
+					"ini",
+					"sql",
+					"txt",
+					"env",
+				],
+			},
+			{ name: "所有文件", extensions: ["*"] },
+		],
+	});
+	if (result.canceled || result.filePaths.length === 0) return null;
+	return result.filePaths[0];
 }
 
 export function applyLoginItem(enabled: boolean) {

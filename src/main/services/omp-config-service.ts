@@ -7,19 +7,18 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parse } from "yaml";
-import type { ApprovalMode } from "../shared/types";
-import type { SkillCommandResult } from "./skills";
-import { runOmpCommand, type SkillHostSettings } from "./skills";
+import {
+	POLICY_TOOLS,
+	type ApprovalMode,
+	type DesktopSettings,
+	type ReplyStyle,
+	type ToolPolicy,
+} from "../../shared/types";
+import type { SkillCommandResult } from "./skill-service";
+import { runOmpCommand, type SkillHostSettings } from "./skill-service";
 
-export type ToolPolicy = "allow" | "prompt" | "deny";
+export { POLICY_TOOLS };
 export type MemoryBackend = "off" | "local" | "mnemopi" | "hindsight" | "sharpshooter";
-export type ReplyStyle = "default" | "friendly" | "pragmatic" | "none";
-
-/**
- * 安全中心实际可控的几类动作。omp 的 `tools.approval` 支持任意工具名，
- * 这里只暴露官方内置的读写壳工具，避免用户写出永不命中的策略。
- */
-export const POLICY_TOOLS = ["bash", "write", "edit", "read"] as const;
 
 export interface OmpConfigSnapshot {
 	memoryBackend: MemoryBackend;
@@ -117,4 +116,42 @@ export async function writeOmpConfig(
 		stderr: failures.join("\n"),
 		error: failures.length ? failures.join("；") : undefined,
 	};
+}
+
+/**
+ * 把应用内设置同步到 omp 的 config.yml：只写真正有变化的键，
+ * 避免每次保存都跑一堆 CLI 子进程。
+ */
+export async function applySettingsToOmp(
+	settings: DesktopSettings,
+	host: SkillHostSettings,
+): Promise<{ ok: boolean; error?: string }> {
+	const current = readOmpConfig();
+	const desired: Array<[string, string]> = [];
+	const compare = <T>(key: string, currentValue: T, nextValue: T) => {
+		if (currentValue !== nextValue) desired.push([key, String(nextValue)]);
+	};
+
+	compare("personality", current.personality, settings.replyStyle);
+	compare("memory.backend", current.memoryBackend, settings.memoryMode);
+	compare("memories.enabled", current.memoriesEnabled, settings.memoryMode === "local");
+	compare("autolearn.enabled", current.autoLearn, settings.autoLearnSkills);
+	compare("tools.approvalMode", current.approvalMode, settings.approvalMode);
+
+	const folders = settings.restrictedFolders.filter(Boolean);
+	if (JSON.stringify(folders) !== JSON.stringify(current.restrictedFolders)) {
+		desired.push(["tools.restrictedFolders", JSON.stringify(folders)]);
+	}
+	const policies: Record<string, string> = {};
+	for (const tool of POLICY_TOOLS) {
+		const value = settings.toolPolicies[tool];
+		if (value) policies[tool] = value;
+	}
+	if (JSON.stringify(policies) !== JSON.stringify(current.approval)) {
+		desired.push(["tools.approval", JSON.stringify(policies)]);
+	}
+
+	if (desired.length === 0) return { ok: true };
+	const result = await writeOmpConfig(host, desired);
+	return { ok: result.ok, error: result.error };
 }
