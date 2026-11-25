@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import type { ToolResult } from "../../shared/types";
 import { getSettings } from "./settings-service";
+import { sessionCwd } from "./session-service";
 import { resolveWorkspacePath } from "./workspace-service";
 
 interface TerminalSession {
@@ -75,9 +76,11 @@ export function acpTerminalCreate(params: Record<string, unknown>): ToolResult {
 		const args = Array.isArray(params.args)
 			? params.args.filter((item): item is string => typeof item === "string")
 			: [];
-		const workspace = resolve(getSettings().cwd);
+		const workspace = resolve(sessionCwd(params.sessionId) || getSettings().cwd);
 		const cwd =
-			typeof params.cwd === "string" && params.cwd ? resolveWorkspacePath(params.cwd) : workspace;
+			typeof params.cwd === "string" && params.cwd
+				? resolveWorkspacePath(params.cwd, workspace)
+				: workspace;
 		const env: NodeJS.ProcessEnv = { ...process.env };
 		delete env.ELECTRON_RUN_AS_NODE;
 		if (Array.isArray(params.env)) {

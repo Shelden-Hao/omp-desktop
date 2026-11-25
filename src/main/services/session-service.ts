@@ -41,3 +41,12 @@ export function saveSessions(next: StoredSession[]) {
 	mkdirSync(dirname(SESSIONS_PATH), { recursive: true });
 	writeFileSync(SESSIONS_PATH, JSON.stringify(next, null, 2), "utf8");
 }
+
+/**
+ * 会话自己的工作目录：ACP 的 fs/terminal 回调按它做沙箱，
+ * 找不到（例如老索引没有该会话）时调用方回退到默认目录。
+ */
+export function sessionCwd(id: unknown): string | null {
+	if (typeof id !== "string" || !id) return null;
+	return loadSessions().find((session) => session.id === id)?.cwd || null;
+}

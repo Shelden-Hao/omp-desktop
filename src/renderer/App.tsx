@@ -87,6 +87,8 @@ export function App() {
 	const [mcpConfig, setMcpConfig] = useState<McpConfigInfo | null>(null);
 	const entryMenuRef = useRef<HTMLSpanElement>(null);
 
+	const [workspaceOpen, setWorkspaceOpen] = useState(false);
+
 	const store = useMessageStore();
 	const { running, runningRef, setRunning } = useRunningFlag();
 
@@ -159,6 +161,22 @@ export function App() {
 	const report = activeId ? connection.contextReports[activeId] : undefined;
 	const contextPercent = report ? Math.min(100, Math.max(0, report.percent)) : 0;
 
+	// 当前会话的实际工作目录：omp 按它做工具沙箱，和默认目录可能不同
+	const activeCwd = sessions.find((session) => session.id === activeId)?.cwd || settings.cwd;
+
+	// 最近用过的项目目录，给工作目录菜单做快捷入口
+	const recentWorkspaces = useMemo(() => {
+		const latest = new Map<string, number>();
+		for (const session of sessions) {
+			if (!session.cwd || session.cwd === settings.cwd) continue;
+			latest.set(session.cwd, Math.max(latest.get(session.cwd) ?? 0, session.ts ?? 0));
+		}
+		return [...latest]
+			.sort((left, right) => right[1] - left[1])
+			.slice(0, 6)
+			.map(([dir]) => dir);
+	}, [sessions, settings.cwd]);
+
 	// omp 不返回任务状态，这里按本地会话数据推导，避免展示没有依据的状态
 	const filteredSessions = useMemo(
 		() =>
@@ -185,6 +203,10 @@ export function App() {
 	useDismiss(contextOpen, {
 		ref: contextRef,
 		onDismiss: () => setContextOpen(false),
+	});
+	useDismiss(workspaceOpen, {
+		ignore: [".omp-workspace"],
+		onDismiss: () => setWorkspaceOpen(false),
 	});
 
 	// 聚合入口：打开时刷新技能与 MCP 配置，关闭交给 useDismiss
@@ -323,7 +345,7 @@ export function App() {
 					running={running}
 					view={sidebarView}
 					filtersActive={filtersActive}
-					cwd={settings.cwd}
+					cwd={activeCwd}
 					connected={connected}
 					onSelect={(session) => void connection.selectSession(session)}
 					onTogglePin={(session) => connection.togglePin(session.id)}
@@ -414,12 +436,35 @@ export function App() {
 							/>
 
 							<Composer
-								cwd={settings.cwd}
 								connected={connected}
 								running={running}
 								sendDisabled={!connected || !composer.input.trim()}
 								editorRef={composer.editorRef}
 								editorHandlers={composer.handlers}
+								workspace={{
+									open: workspaceOpen,
+									current: activeCwd,
+									defaultDir: settings.cwd,
+									recent: recentWorkspaces,
+									disabled: running,
+									onToggle: () => setWorkspaceOpen((value) => !value),
+									onSelect: (dir) => {
+										setWorkspaceOpen(false);
+										void connection.switchWorkspace(dir);
+									},
+									onBrowse: () => {
+										void (async () => {
+											try {
+												const dir = await window.desktop.system.pickDirectory();
+												if (!dir) return;
+												setWorkspaceOpen(false);
+												await connection.switchWorkspace(dir);
+											} catch (error) {
+												setStatus(`选择目录失败：${(error as Error).message}`);
+											}
+										})();
+									},
+								}}
 								resourceSuggest={{
 									open: composer.resourceSuggest.open,
 									menu: {

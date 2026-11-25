@@ -14,6 +14,7 @@ import {
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import type { OpenedFile, ToolResult } from "../../shared/types";
 import { getSettings } from "./settings-service";
+import { sessionCwd } from "./session-service";
 
 const MAX_PREVIEW_BYTES = 2 * 1024 * 1024;
 
@@ -63,28 +64,31 @@ export function languageFor(fileName: string) {
 	return LANGUAGE_BY_EXTENSION[ext] || "text";
 }
 
-export function resolveWorkspacePath(input: string): string {
-	const root = resolve(getSettings().cwd);
-	const target = resolve(isAbsolute(input) ? input : join(root, input));
-	const rootKey = root.toLowerCase();
+/** 目标路径是否在 root 之内（Windows 大小写不敏感，统一转小写比较） */
+function isInside(target: string, root: string) {
 	const targetKey = target.toLowerCase();
-	if (targetKey !== rootKey && !targetKey.startsWith(`${rootKey}${sep.toLowerCase()}`)) {
-		throw new Error("路径超出工作目录");
-	}
+	const rootKey = root.toLowerCase();
+	return targetKey === rootKey || targetKey.startsWith(`${rootKey}${sep.toLowerCase()}`);
+}
+
+/**
+ * 校验路径落在工作目录内。root 默认取设置里的默认目录；
+ * 会话有自己的 cwd 时由调用方传入（见 sessionCwd），否则跨项目会话的读写会被误拒。
+ */
+export function resolveWorkspacePath(input: string, root = getSettings().cwd): string {
+	const base = resolve(root);
+	const target = resolve(isAbsolute(input) ? input : join(base, input));
+	if (!isInside(target, base)) throw new Error("路径超出工作目录");
 	return target;
 }
 
 /** 符号链接可能指向工作目录之外，解析真实路径后再校验一次 */
-function resolveExistingPath(input: string): string {
-	const candidate = resolveWorkspacePath(input);
+function resolveExistingPath(input: string, root: string): string {
+	const candidate = resolveWorkspacePath(input, root);
 	if (!existsSync(candidate)) return candidate;
 	try {
 		const real = resolve(realpathSync(candidate));
-		const realKey = real.toLowerCase();
-		const rootKey = resolve(getSettings().cwd).toLowerCase();
-		if (realKey !== rootKey && !realKey.startsWith(`${rootKey}${sep.toLowerCase()}`)) {
-			throw new Error("路径超出工作目录");
-		}
+		if (!isInside(real, resolve(root))) throw new Error("路径超出工作目录");
 		return real;
 	} catch (error) {
 		if (error instanceof Error && error.message === "路径超出工作目录") throw error;
@@ -119,7 +123,8 @@ function toolFail(error: unknown): ToolResult {
 export function acpFsRead(params: Record<string, unknown>): ToolResult {
 	try {
 		if (typeof params.path !== "string" || !params.path) throw new Error("缺少文件路径");
-		const filePath = resolveExistingPath(params.path);
+		const root = sessionCwd(params.sessionId) || getSettings().cwd;
+		const filePath = resolveExistingPath(params.path, root);
 		const document = readTextDocument(filePath);
 		const line = typeof params.line === "number" && params.line > 0 ? params.line : 1;
 		const limit = typeof params.limit === "number" && params.limit > 0 ? params.limit : undefined;
@@ -138,7 +143,8 @@ export function acpFsWrite(params: Record<string, unknown>): ToolResult {
 	try {
 		if (typeof params.path !== "string" || !params.path) throw new Error("缺少文件路径");
 		if (typeof params.content !== "string") throw new Error("文件内容必须是文本");
-		const filePath = resolveWorkspacePath(params.path);
+		const root = sessionCwd(params.sessionId) || getSettings().cwd;
+		const filePath = resolveWorkspacePath(params.path, root);
 		const contentBytes = Buffer.byteLength(params.content, "utf8");
 		if (contentBytes > MAX_PREVIEW_BYTES) throw new Error("单次写入超过 2 MB");
 		mkdirSync(dirname(filePath), { recursive: true });

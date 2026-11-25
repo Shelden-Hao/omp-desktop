@@ -11,13 +11,13 @@ import type {
 	MouseEvent as ReactMouseEvent,
 	RefObject,
 } from "react";
-import { shortPath } from "../../core/format";
 import { Icon } from "../common/Icon";
 import { ApprovalMenu, type ApprovalMenuProps } from "./ApprovalMenu";
 import { ContextPanel, type ContextPanelProps } from "./ContextPanel";
 import { EntryMenu, type EntryMenuProps } from "./EntryMenu";
 import { ModelPanel, type ModelPanelProps } from "./ModelPanel";
 import { SuggestMenu, type SuggestMenuProps } from "./SuggestMenu";
+import { WorkspaceMenu, type WorkspaceMenuProps } from "./WorkspaceMenu";
 
 /** 输入框事件全部由 App 提供，因为读写 chip 依赖 App 里的草稿状态 */
 interface EditorHandlers {
@@ -31,7 +31,6 @@ interface EditorHandlers {
 }
 
 interface ComposerProps {
-	cwd: string;
 	connected: boolean;
 	running: boolean;
 	/** 发送按钮是否置灰（未连接或输入为空） */
@@ -41,6 +40,8 @@ interface ComposerProps {
 	resourceSuggest: { open: boolean; menu: SuggestMenuProps };
 	skillSuggest: { open: boolean; menu: SuggestMenuProps };
 	entryMenu: EntryMenuProps;
+	/** 工作目录选择：不选就是默认目录 */
+	workspace: WorkspaceMenuProps;
 	approval: ApprovalMenuProps;
 	context: ContextPanelProps;
 	modelTrigger: { name?: string; open: boolean; onToggle(): void };
@@ -50,7 +51,6 @@ interface ComposerProps {
 }
 
 export function Composer({
-	cwd,
 	connected,
 	running,
 	sendDisabled,
@@ -59,6 +59,7 @@ export function Composer({
 	resourceSuggest,
 	skillSuggest,
 	entryMenu,
+	workspace,
 	approval,
 	context,
 	modelTrigger,
@@ -91,9 +92,7 @@ export function Composer({
 				<div className="omp-composer-footer">
 					<div className="omp-composer-hint">
 						<EntryMenu {...entryMenu} />
-						<span className="omp-path-label" title={cwd}>
-							{shortPath(cwd)}
-						</span>
+						<WorkspaceMenu {...workspace} />
 					</div>
 					<div className="omp-composer-tools">
 						<ApprovalMenu {...approval} />

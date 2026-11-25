@@ -262,6 +262,116 @@
   align-items: center;
   gap: var(--space-2);
 }
+
+/* ---------- 工作目录选择 ---------- */
+.omp-workspace {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+.omp-workspace-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 240px;
+  padding: 3px 7px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+.omp-workspace-trigger:hover:not(:disabled),
+.omp-workspace-trigger.active {
+  background: var(--surface-subtle);
+  color: var(--text-primary);
+}
+.omp-workspace-trigger:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.omp-workspace-trigger > svg:first-child {
+  color: var(--text-muted);
+}
+.omp-workspace-current {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.omp-workspace-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 70;
+  width: 268px;
+  padding: 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--surface-panel);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.16),
+    0 2px 6px rgba(0, 0, 0, 0.06);
+}
+.omp-workspace-label {
+  display: block;
+  padding: 3px 10px 5px;
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+}
+.omp-workspace-menu button {
+  width: 100%;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--font-md);
+  text-align: left;
+  cursor: pointer;
+}
+.omp-workspace-menu button:hover {
+  background: var(--surface-hover);
+}
+.omp-workspace-menu button > svg:first-child {
+  flex: none;
+  color: var(--text-muted);
+}
+.omp-workspace-menu button > svg:last-child {
+  flex: none;
+  color: var(--accent);
+}
+.omp-workspace-item-name {
+  flex: none;
+  max-width: 128px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.omp-workspace-item-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  color: var(--text-muted);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: var(--font-xs);
+}
+.omp-workspace-seg {
+  height: 1px;
+  margin: 5px 0;
+  background: var(--border-subtle);
+}
 .omp-model-trigger {
   height: 30px;
   display: inline-flex;

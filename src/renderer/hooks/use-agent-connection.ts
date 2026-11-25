@@ -28,6 +28,7 @@ import {
 } from "../core/acp/event-router";
 import { applyConfigEffect, applyModeEffect, applyUsageEffect } from "../core/acp/apply-effect";
 import { parseContextReport } from "../core/context-report";
+import { dirName } from "../core/format";
 import { loadSessionIndex } from "../core/session-boot";
 import { APPROVAL_LABEL } from "../core/labels";
 import type { Session } from "../core/session-filters";
@@ -35,6 +36,17 @@ import type { MessageStore } from "./use-message-store";
 
 export interface PermissionState extends PermissionAsk {
   respond: (result: unknown) => void;
+}
+
+/** 工作目录决定新会话叫什么：默认目录继续用编号，项目目录用目录名 */
+function sessionTitle(cwd: string, defaultDir: string, base: Session[]) {
+  if (!cwd || cwd === defaultDir) return `会话 ${base.length + 1}`;
+  const name = dirName(cwd);
+  const taken = new Set(base.map((session) => session.title));
+  if (!taken.has(name)) return name;
+  let index = 2;
+  while (taken.has(`${name} ${index}`)) index += 1;
+  return `${name} ${index}`;
 }
 
 export type AuditLogger = (entry: Partial<AuditEntry>) => Promise<unknown> | void;
@@ -74,6 +86,8 @@ export interface AgentConnection {
   rebindSession: (acp: AcpClient, oldId: string, cwd: string) => Promise<string>;
   selectSession: (session: Session) => Promise<void>;
   newSession: () => Promise<void>;
+  /** 切换工作目录 = 新建一个绑定该目录的会话（omp 的 cwd 在 session/new 时固定） */
+  switchWorkspace: (dir: string) => Promise<void>;
   /** 重命名只改本地索引标题，omp 里的会话标题不受影响 */
   renameSession: (id: string, title: string) => void;
   togglePin: (id: string) => void;
@@ -429,20 +443,15 @@ export function useAgentConnection({
 
   /** 以给定列表为基础新建 omp 会话；删除最后一个会话后也走这里补一个空的 */
   const createSession = useCallback(
-    async (base: Session[]) => {
+    async (base: Session[], dir?: string) => {
       if (!client) return;
       try {
         const loaded = await window.desktop.settings.get();
-        const session = await client.newSession(loaded.cwd);
-        const next: Session[] = [
-          ...base,
-          {
-            id: session.sessionId,
-            title: `会话 ${base.length + 1}`,
-            cwd: loaded.cwd,
-            ts: Date.now(),
-          },
-        ];
+        // 目录在 session/new 时就固定下来：omp 用它做工具沙箱的根，后续无法改
+        const cwd = dir || loaded.cwd;
+        const session = await client.newSession(cwd);
+        const title = sessionTitle(cwd, loaded.cwd, base);
+        const next: Session[] = [...base, { id: session.sessionId, title, cwd, ts: Date.now() }];
         loadedSessions.current.add(session.sessionId);
         setSessionStates((prev) => ({
           ...prev,
@@ -462,6 +471,29 @@ export function useAgentConnection({
   );
 
   const newSession = useCallback(() => createSession(sessions), [createSession, sessions]);
+
+  /**
+   * 切换工作目录：会话的 cwd 在 omp 侧创建时就绑定死了，
+   * 所以换目录等于换一个新会话；当前会话还是空的时候直接顶替掉，避免留下空壳。
+   */
+  const switchWorkspace = useCallback(
+    async (dir: string) => {
+      const active = sessions.find((item) => item.id === activeIdRef.current);
+      if (active?.cwd === dir) return;
+      if (!client) {
+        setStatus("未连接 omp，无法切换工作目录");
+        return;
+      }
+      if (runningRef.current) {
+        setStatus("任务运行中，结束后再切换工作目录");
+        return;
+      }
+      const idle = !messagesRef.current[active?.id ?? ""]?.length;
+      const base = idle && active ? sessions.filter((item) => item.id !== active.id) : sessions;
+      await createSession(base, dir);
+    },
+    [client, createSession, messagesRef, runningRef, sessions, setStatus],
+  );
 
   const renameSession = useCallback(
     (id: string, title: string) => {
@@ -575,6 +607,7 @@ export function useAgentConnection({
     rebindSession,
     selectSession,
     newSession,
+    switchWorkspace,
     renameSession,
     togglePin,
     deleteSession,
