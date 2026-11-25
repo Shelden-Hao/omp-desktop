@@ -29,7 +29,8 @@ renderer/ ← 只依赖 shared + react
 - **`renderer/core/*` 不 import React**：纯函数、纯类，可以被任意组件复用，也可以直接单测。
 - **`renderer/components/*` 不自取数据**：不发 IPC、不读 `settings` 全局，只通过 props 接收数据与回调。
 - **`renderer/panels/*` 才是容器**：设置页、技能页这种「一整块业务」的界面可以自己调 `window.desktop`、自己管内部状态；判断标准是「这块能不能被单独放进另一个页面复用」，能就写面板、不能就写组件。
-- **`App.tsx` 只做装配**：不放解析、格式化、正则匹配、DOM 操作；这些属于 `core/`。
+- **`renderer/hooks/*` 放跨界面复用的状态编排**：只做「状态 + 副作用 + 对外句柄」，不写 JSX；`App.tsx` 通过 hook 拿到句柄后再装配组件。消息归并、视图模型这类无副作用的规则仍然放 `core/`。
+- **`App.tsx` 只做装配**：不放解析、格式化、正则匹配、DOM 操作；这些属于 `core/` 或对应 hook。
 
 ### 文件职责
 
@@ -37,6 +38,7 @@ renderer/ ← 只依赖 shared + react
 - 展示组件用大驼峰（`ContextMeter.tsx`），纯逻辑模块用小写中划线（`context-report.ts`）。
 - 单文件超过 400 行先想能不能按概念拆，不要按行数硬切。
 - 新增界面区域时，同时在 `styles/` 里找到对应文件加样式，不要把新规则堆到别的域。
+- 设置页按分页拆：`panels/settings/index.tsx` 管草稿态、数据加载与导航，`panes/*.tsx` 每页只管自己的 `<section>`，跨页共用控件放 `panels/settings/controls.tsx`。
 
 ### 样式文件分工
 
@@ -65,7 +67,7 @@ renderer/ ← 只依赖 shared + react
 2. `main/services/settings-service.ts`：默认值、持久化校验。
 3. 需要系统行为 → `main/platform/`；需要业务编排 → `main/services/`。
 4. 需要暴露给界面 → `main/ipc/*` + `shared/bridge.ts` + `preload`。
-5. `renderer/components/settings/panes/*`：加控件；`settings` 页面导航在 `settings-nav.ts`。
+5. `renderer/panels/settings/panes/*.tsx`：加控件，并在 `panels/settings/index.tsx` 里按 `panels/settings/settings-nav.ts` 的顺序挂上；导航顺序必须与渲染顺序一致，否则滚动联动会错位。
 6. 需要作用到 omp 配置 → `main/services/omp-config-service.ts`。
 
 ### 新增一个 ACP 事件的完整路径
