@@ -81,8 +81,9 @@ export function filterSessions({
     (session) =>
       matchTime(session.ts) && (statusFilter === "all" || statusOf(session) === statusFilter),
   );
-  // toSorted 稳定：置顶只改分组顺序，不打乱原有先后
-  return matched.toSorted(
-    (left, right) => Number(Boolean(right.pinned)) - Number(Boolean(left.pinned)),
-  );
+  // 置顶在前，其余按最近活动排序；toSorted 稳定，时间相同保持原顺序
+  return matched.toSorted((left, right) => {
+    const pin = Number(Boolean(right.pinned)) - Number(Boolean(left.pinned));
+    return pin !== 0 ? pin : (right.ts ?? 0) - (left.ts ?? 0);
+  });
 }

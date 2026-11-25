@@ -16,7 +16,7 @@
 .omp-messages {
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-8) clamp(var(--space-6), 6vw, var(--space-8));
+  padding: var(--space-8) clamp(var(--space-6), 6vw, var(--space-8)) 96px;
 }
 .omp-scroll-bottom {
   position: absolute;
@@ -24,15 +24,15 @@
   bottom: 0;
   left: 0;
   z-index: 6;
-  height: 108px;
+  height: 84px;
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding-bottom: 10px;
+  padding-bottom: 6px;
   background: linear-gradient(
     to top,
-    var(--surface-app) 28%,
-    color-mix(in srgb, var(--surface-app) 68%, transparent) 64%,
+    var(--surface-app) 20%,
+    color-mix(in srgb, var(--surface-app) 55%, transparent) 62%,
     transparent
   );
   pointer-events: none;
@@ -159,6 +159,11 @@
   border-color: var(--accent);
   color: #fff;
 }
+.omp-message.agent .omp-message-avatar {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent);
+}
 .omp-message.system .omp-message-avatar {
   color: var(--danger);
 }
@@ -244,7 +249,7 @@
 .omp-agent-status {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   margin: -2px 0 var(--space-3);
   color: var(--text-muted);
   font-size: var(--font-sm);
@@ -255,36 +260,117 @@
 .omp-agent-status.busy > svg:first-child {
   color: var(--accent);
 }
-.omp-process-fold {
-  margin: -2px 0 var(--space-3);
+
+/* ---------- 一轮处理过程：运行中展开，结束后折叠成一行摘要 ---------- */
+.omp-fold-chevron {
+  margin-left: 2px;
+  color: var(--text-muted);
+  transition: transform 150ms ease;
 }
-.omp-process-fold > summary.omp-agent-status {
-  margin: 0;
+details[open] > summary .omp-fold-chevron {
+  transform: rotate(180deg);
+}
+.omp-process {
+  margin: 0 0 var(--space-3);
+}
+.omp-process-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: calc(100% + 6px);
+  margin-left: -6px;
+  padding: 4px 8px 4px 6px;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: var(--font-md);
   cursor: pointer;
   list-style: none;
+  user-select: none;
+  transition: background 120ms ease;
 }
-.omp-process-fold > summary.omp-agent-status::-webkit-details-marker {
+.omp-process-head::-webkit-details-marker {
   display: none;
 }
-.omp-process-fold > summary.omp-agent-status .omp-fold-chevron {
-  margin-left: 2px;
+.omp-process-head:hover {
+  background: var(--surface-hover);
 }
-.omp-process-hint {
+.omp-process-mark {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+}
+.omp-process-mark.busy {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.omp-process-mark.failed {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+.omp-process-spinner {
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: omp-process-spin 0.8s linear infinite;
+}
+@keyframes omp-process-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.omp-process-title {
+  flex: none;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.omp-process-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-muted);
+  font-size: var(--font-sm);
 }
-.omp-process-hint::before {
-  content: "·";
-  margin-right: 6px;
+.omp-process-time {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+  font-variant-numeric: tabular-nums;
 }
-.omp-process-fold[open] > summary .omp-process-hint {
-  display: none;
+.omp-process-head .omp-fold-chevron {
+  flex: none;
+  opacity: 0.55;
+}
+.omp-process-head:hover .omp-fold-chevron {
+  opacity: 1;
 }
 .omp-process-body {
-  margin-top: var(--space-3);
-  padding-left: var(--space-3);
-  border-left: 1px solid var(--border-subtle);
+  position: relative;
+  margin: 2px 0 4px;
+  padding: 2px 0 2px 24px;
+}
+.omp-process-body::before {
+  content: "";
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 8px;
+  width: 2px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--text-muted) 55%, transparent);
 }
 .omp-message.user .omp-message-content {
+  width: fit-content;
+  max-width: min(100%, 640px);
+  margin-left: auto;
   background: var(--accent-soft);
   border-color: var(--accent-ring);
 }
@@ -325,7 +411,7 @@
   padding: 1px 5px;
   border-radius: 4px;
   background: var(--surface-subtle);
-  color: var(--accent);
+  color: var(--text-secondary);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 0.92em;
 }
@@ -381,218 +467,229 @@
   color: var(--text-secondary);
 }
 
-.omp-thinking {
-  margin: var(--space-3) 0;
+/* ---------- 思考 / 工具步骤：一行一步，左侧时间线 ---------- */
+.omp-step {
+  position: relative;
+  margin: 1px 0;
 }
-.omp-thinking summary,
-.omp-tool-result summary {
+.omp-step-head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 0;
-  color: var(--text-muted);
-  font-size: var(--font-md);
-  font-weight: 500;
-  cursor: pointer;
+  gap: 8px;
+  min-height: 28px;
+  padding: 3px 8px 3px 6px;
+  border-radius: 8px;
   list-style: none;
+  cursor: pointer;
   user-select: none;
+  transition: background 120ms ease;
 }
-.omp-thinking summary:hover,
-.omp-tool-result summary:hover {
-  color: var(--text-secondary);
-}
-.omp-thinking summary::-webkit-details-marker,
-.omp-tool-result summary::-webkit-details-marker {
+.omp-step-head::-webkit-details-marker {
   display: none;
 }
-.omp-fold-chevron {
-  margin-left: 2px;
-  color: var(--text-muted);
-  transition: transform 150ms ease;
-}
-.omp-thinking summary .omp-fold-chevron,
-.omp-tool-summary .omp-fold-chevron {
-  margin-left: auto;
-}
-.omp-thinking-count {
-  color: var(--text-muted);
-  font-size: var(--font-xs);
-  font-weight: 400;
-}
-details[open] > summary .omp-fold-chevron {
-  transform: rotate(180deg);
-}
-.omp-thinking-body {
-  margin-top: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border-left: 2px solid var(--border-strong);
-  background: var(--surface-subtle);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  color: var(--text-secondary);
-  font-size: var(--font-md);
-  max-height: 360px;
-  overflow-y: auto;
-}
-
-.omp-tool-card {
-  margin: 6px 0;
-  border: 0;
-  border-left: 2px solid var(--border-subtle);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  background: linear-gradient(90deg, var(--surface-subtle), transparent);
-  overflow: hidden;
-}
-.omp-tool-summary {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: 30px;
-  padding: 4px var(--space-3);
-  cursor: pointer;
-  list-style: none;
-  user-select: none;
-}
-.omp-tool-summary::-webkit-details-marker {
-  display: none;
-}
-.omp-tool-summary:hover {
+.omp-step-head:hover {
   background: var(--surface-hover);
 }
-.omp-tool-icon {
+.omp-step-icon {
+  flex: none;
   width: 18px;
   height: 18px;
-  flex: none;
   display: grid;
   place-items: center;
+  border-radius: 6px;
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+}
+.omp-step-icon.pending {
   color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
-.omp-tool-card.completed .omp-tool-icon {
-  color: var(--success);
-}
-.omp-tool-card.failed .omp-tool-icon {
+.omp-step-icon.failed {
   color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
 }
-.omp-tool-label {
+.omp-step-name {
   flex: none;
   color: var(--text-secondary);
   font-size: var(--font-md);
-  font-weight: 500;
+  font-weight: 600;
 }
-.omp-tool-title-inline {
+.omp-step-subject {
   flex: 1;
   min-width: 0;
-  color: var(--text-muted);
-  font-size: var(--font-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--text-muted);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: var(--font-xs);
 }
-.omp-tool-status {
-  flex: none;
+.omp-step-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-muted);
   font-size: var(--font-sm);
 }
-.omp-tool-body {
-  padding: 0 var(--space-3) var(--space-3) 34px;
+.omp-step[open] .omp-step-preview {
+  display: none;
 }
-.omp-tool-section {
-  margin-top: var(--space-3);
-}
-.omp-tool-section-label {
-  margin-bottom: var(--space-1);
-  color: var(--text-muted);
+.omp-step-status {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
   font-size: var(--font-xs);
-  font-weight: 600;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--surface-subtle);
 }
-.omp-tool-pre {
+.omp-step-status.pending {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.omp-step-status.failed {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+.omp-step-head .omp-fold-chevron {
+  flex: none;
+  opacity: 0.45;
+  transition:
+    transform 150ms ease,
+    opacity 120ms ease;
+}
+.omp-step-head:hover .omp-fold-chevron,
+.omp-step[open] > .omp-step-head .omp-fold-chevron {
+  opacity: 0.75;
+}
+.omp-step-body {
+  padding: 2px 0 10px 26px;
+}
+.omp-step-body .omp-markdown {
+  color: var(--text-secondary);
+  font-size: var(--font-md);
+  line-height: 1.75;
+}
+.omp-step-body .omp-markdown code {
+  padding: 0 4px;
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+}
+/* 在过程时间线里：图标压在线条上，文字与标题列对齐 */
+.omp-process-body .omp-step-icon {
+  position: absolute;
+  z-index: 1;
+  top: 5px;
+  left: -24px;
+  background: var(--surface-panel);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 0 0 3px var(--surface-app);
+}
+.omp-process-body .omp-step-head {
+  padding-left: 0;
+}
+.omp-process-body .omp-step-body {
+  padding-left: 0;
+}
+.omp-io {
+  margin-top: 8px;
+}
+.omp-io-label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+.omp-io-label.error {
+  color: var(--danger);
+}
+.omp-io-pre {
   margin: 0;
-  padding: var(--space-3);
-  max-height: 260px;
+  padding: 8px 10px;
+  max-height: 240px;
   overflow: auto;
-  border-radius: var(--radius-sm);
+  border-radius: 8px;
   background: var(--surface-subtle);
   color: var(--text-secondary);
   font-family: "SFMono-Regular", Consolas, monospace;
   font-size: var(--font-sm);
+  line-height: 1.65;
   white-space: pre-wrap;
   word-break: break-word;
 }
-.omp-tool-card.failed .omp-tool-pre {
+.omp-io-pre.error {
   color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface-subtle));
 }
-.omp-tool-files {
+.omp-step-files {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: var(--space-3);
+  margin: 2px 0 6px;
 }
-.omp-tool-file {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+.omp-step-file {
   max-width: 100%;
-  padding: 2px 8px;
+  padding: 1px 8px;
   border: 1px solid var(--border-subtle);
   border-radius: 999px;
   background: var(--surface-panel);
   color: var(--text-muted);
-  font-size: var(--font-xs);
   font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: var(--font-xs);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.omp-tool-file svg {
-  flex: none;
-}
-.omp-tool-diff {
-  margin-top: var(--space-3);
+
+.omp-diff {
+  margin-top: 8px;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
+  border-radius: 8px;
   overflow: hidden;
+  background: var(--surface-code);
 }
-.omp-tool-diff-head {
+.omp-diff-head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 9px;
+  gap: 8px;
+  padding: 5px 10px;
   background: var(--surface-subtle);
-  color: var(--text-secondary);
   font-size: var(--font-xs);
 }
-.omp-tool-diff-head svg {
-  flex: none;
-  color: var(--text-muted);
-}
-.omp-tool-diff-path {
+.omp-diff-path {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--text-secondary);
   font-family: "SFMono-Regular", Consolas, monospace;
 }
-.omp-tool-diff-stat {
+.omp-diff-stats {
   flex: none;
+  display: inline-flex;
+  gap: 6px;
   font-family: "SFMono-Regular", Consolas, monospace;
 }
-.omp-tool-diff-stat.add {
+.omp-diff-stats .add {
   color: var(--success);
+  font-style: normal;
 }
-.omp-tool-diff-stat.del {
+.omp-diff-stats .del {
   color: var(--danger);
+  font-style: normal;
 }
-.omp-tool-diff-pre {
+.omp-diff-pre {
   margin: 0;
   padding: 6px 0;
   max-height: 320px;
   overflow: auto;
-  background: var(--surface-code);
+  color: var(--text-secondary);
   font-family: "SFMono-Regular", Consolas, monospace;
   font-size: var(--font-sm);
-  line-height: 1.55;
+  line-height: 1.6;
   white-space: pre;
 }
 .omp-diff-line {

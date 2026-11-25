@@ -61,7 +61,10 @@ function readToolContent(value: unknown, title: string): { text: string; diffs: 
   };
   collect(value);
   const body = texts.filter((text, index) => !(index === 0 && text === title));
-  return { text: body.join("\n\n"), diffs };
+  const text = body.join("\n\n");
+  // omp 的 bash 输出开头会回显一遍 `$ command`，标题里已经有了
+  const echo = title ? `${title}\n` : "";
+  return { text: echo && text.startsWith(echo) ? text.slice(echo.length) : text, diffs };
 }
 
 function readLocations(value: unknown): string[] {

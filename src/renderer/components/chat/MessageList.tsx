@@ -8,7 +8,9 @@
 import type { RefObject } from "react";
 import type { ChatMessage } from "../../../shared/types";
 import { formatDuration } from "../../core/format";
+import { summarizeProcess } from "../../core/process-summary";
 import { useAutoOpen } from "../../hooks/use-auto-open";
+import { useElapsed } from "../../hooks/use-elapsed";
 import { Icon } from "../common/Icon";
 import { Block } from "./ContentBlock";
 import { MessageActions } from "./MessageActions";
@@ -155,6 +157,7 @@ function Message({ message, isActive, query, onOpenDoc, onRetry }: MessageProps)
 					<ProcessFold
 						blocks={processBlocks}
 						generating={generating}
+						startedAt={message.ts}
 						durationMs={message.durationMs}
 						query={query}
 						onOpenDoc={onOpenDoc}
@@ -201,27 +204,45 @@ function Message({ message, isActive, query, onOpenDoc, onRetry }: MessageProps)
 function ProcessFold({
 	blocks,
 	generating,
+	startedAt,
 	durationMs,
 	query,
 	onOpenDoc,
 }: {
 	blocks: ChatMessage["blocks"];
 	generating: boolean;
+	startedAt: number;
 	durationMs?: number;
 	query: string;
 	onOpenDoc: (name: string, content: string, path?: string) => void;
 }) {
 	const { open, onToggle } = useAutoOpen(generating);
+	const elapsed = useElapsed(generating, startedAt);
+	const failures = blocks.filter(
+		(block) => block.type === "tool_call" && block.status === "failed",
+	).length;
+	const mark = generating ? "busy" : failures > 0 ? "failed" : "done";
+	const time = generating ? elapsed : durationMs;
 
 	return (
-		<details className="omp-process-fold" open={open} onToggle={onToggle}>
-			<summary className="omp-agent-status">
-				<Icon name={generating ? "spark" : "check"} size={11} />
-				<span>
-					{generating ? "处理中" : "已完成"}
-					{!generating && durationMs !== undefined ? ` ${formatDuration(durationMs)}` : ""}
+		<details className="omp-process" open={open} onToggle={onToggle}>
+			<summary className="omp-process-head">
+				<span className={`omp-process-mark ${mark}`}>
+					{generating ? (
+						<span className="omp-process-spinner" />
+					) : failures > 0 ? (
+						<Icon name="warning" size={11} />
+					) : (
+						<Icon name="check" size={11} />
+					)}
 				</span>
-				<span className="omp-process-hint">{generating ? "实时过程" : "查看处理过程"}</span>
+				<span className="omp-process-title">{generating ? "处理中" : "处理过程"}</span>
+				<span className="omp-process-summary">
+					{[summarizeProcess(blocks), failures > 0 ? `${failures} 次失败` : ""]
+						.filter(Boolean)
+						.join(" · ")}
+				</span>
+				{time !== undefined && <span className="omp-process-time">{formatDuration(time)}</span>}
 				<Icon name="chevron" size={12} className="omp-fold-chevron" />
 			</summary>
 			<div className="omp-process-body">
