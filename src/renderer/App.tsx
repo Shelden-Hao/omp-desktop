@@ -10,6 +10,7 @@ import {
 	type DesktopSettings,
 	type ThemeMode,
 	type SessionState,
+	type SkillSummary,
 	normalizeSessionState,
 } from "./acp-client";
 import { DEFAULT_DOCS, type DocFile } from "./docs";
@@ -178,6 +179,9 @@ const APPROVAL_HINT: Record<ApprovalMode, string> = {
 };
 
 const APPROVAL_OPTIONS: ApprovalMode[] = ["yolo", "write", "always-ask-cached", "always-ask"];
+
+/** 光标前正在输入的技能指令：/name 或 /skill:name（omp 实际识别的写法） */
+const SKILL_TOKEN_RE = /(?:^|\s)\/(?:skill:)?([\w-]*)$/;
 
 /** omp `/context` 输出里的分段名称 → 中文 */
 const CONTEXT_PART_LABEL: Record<string, string> = {
@@ -1007,6 +1011,11 @@ export function App() {
 	const [agentEpoch, setAgentEpoch] = useState(0);
 	const [contextOpen, setContextOpen] = useState(false);
 	const [contextReports, setContextReports] = useState<Record<string, ContextReport>>({});
+	const [skillChips, setSkillChips] = useState<string[]>([]);
+	const [skillSuggestOpen, setSkillSuggestOpen] = useState(false);
+	const [skillQuery, setSkillQuery] = useState("");
+	const [skillActive, setSkillActive] = useState(0);
+	const [installedSkills, setInstalledSkills] = useState<SkillSummary[]>([]);
 
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -1031,6 +1040,31 @@ export function App() {
 		[activeId, messagesBySession],
 	);
 	const visibleMessages = messages;
+
+	// 每次打开联想都重新读 omp 技能列表，这样面板里新装/卸载的技能即刻生效
+	useEffect(() => {
+		if (!skillSuggestOpen) return;
+		let cancelled = false;
+		void window.desktop.skills.list().then((reply) => {
+			if (!cancelled && reply.ok && reply.data) setInstalledSkills(reply.data.skills);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [skillSuggestOpen]);
+
+	const skillSuggestions = useMemo(() => {
+		const query = skillQuery.trim().toLowerCase();
+		const matched = query
+			? installedSkills.filter(
+					(skill) =>
+						skill.name.toLowerCase().includes(query) ||
+						skill.description.toLowerCase().includes(query),
+				)
+			: installedSkills;
+		return matched.filter((skill) => !skillChips.includes(skill.name)).slice(0, 8);
+	}, [installedSkills, skillQuery, skillChips]);
+
 	const currentDoc = docs.find((doc) => doc.key === activeDoc);
 	const filtersActive = statusFilter !== "all" || timeFilter !== "all";
 	const report = activeId ? contextReports[activeId] : undefined;
@@ -1671,13 +1705,19 @@ export function App() {
 	}, [messages, permission, running]);
 
 	const send = async (override?: string) => {
-		const text = (override ?? input).trim();
+		const raw = (override ?? input).trim();
+		// chip 只是输入态的展示，发给 omp 前还原成它认识的 /skill:<name>；重试走 override，不再叠加 chip
+		const prefix =
+			override === undefined ? skillChips.map((name) => `/skill:${name}`).join(" ") : "";
+		const text = prefix ? `${prefix} ${raw}`.trim() : raw;
 		// 正在刷新上下文用量时先让出，避免两个 prompt 并发打到同一会话
 		if (!client || !activeId || !text || running || contextBusyRef.current) return;
 		const sessionId = activeId;
 		const startedAt = Date.now();
 		const userMessageId = uid();
 		setInput("");
+		setSkillChips([]);
+		setSkillSuggestOpen(false);
 		atBottomRef.current = true;
 		setAtBottom(true);
 		updateMessages(sessionId, (prev) => [
@@ -1893,6 +1933,35 @@ export function App() {
 		} catch (error) {
 			setStatus(`引用文件失败：${(error as Error).message}`);
 		}
+	};
+
+	const updateSkillSuggest = (value: string, cursor: number) => {
+		const match = value.slice(0, cursor).match(SKILL_TOKEN_RE);
+		setSkillSuggestOpen(Boolean(match));
+		setSkillQuery(match?.[1] ?? "");
+		setSkillActive(0);
+	};
+
+	const applySkill = (name: string) => {
+		// 已输入的 /skill:xxx 只是联想草稿，选定后交给 chip 承载，避免文本和 chip 重复
+		setInput((prev) => prev.replace(SKILL_TOKEN_RE, (token) => (token.startsWith(" ") ? " " : "")));
+		setSkillChips((prev) => (prev.includes(name) ? prev : [...prev, name]));
+		setSkillSuggestOpen(false);
+		setSkillQuery("");
+		requestAnimationFrame(() => inputRef.current?.focus());
+	};
+
+	const insertSkillReference = () => {
+		setInput((prev) => `${prev}${prev && !prev.endsWith(" ") ? " " : ""}/`);
+		setSkillSuggestOpen(true);
+		setSkillQuery("");
+		setSkillActive(0);
+		requestAnimationFrame(() => {
+			const el = inputRef.current;
+			if (!el) return;
+			el.focus();
+			el.setSelectionRange(el.value.length, el.value.length);
+		});
 	};
 
 	const reloadDoc = async () => {
@@ -2519,20 +2588,108 @@ export function App() {
 
 							<div className="omp-composer-wrap">
 								<div className="omp-composer">
-									<textarea
-										ref={inputRef}
-										value={input}
-										onChange={(event) => setInput(event.target.value)}
-										onKeyDown={(event) => {
-											if (event.key === "Enter" && !event.shiftKey) {
-												event.preventDefault();
-												send();
-											}
-										}}
-										placeholder={connected ? "描述任务，按 Enter 发送" : "等待连接 omp…"}
-										disabled={!connected || running}
-										aria-label="任务输入框"
-									/>
+									{skillSuggestOpen && (
+										<div
+											className="omp-skill-suggest"
+											role="listbox"
+											aria-label="技能联想"
+											onMouseDown={(event) => event.preventDefault()}
+										>
+											<div className="omp-skill-suggest-head">技能 ({skillSuggestions.length})</div>
+											{skillSuggestions.length === 0 ? (
+												<div className="omp-skill-suggest-empty">没有匹配的已安装技能</div>
+											) : (
+												skillSuggestions.map((skill, index) => (
+													<button
+														key={skill.name}
+														type="button"
+														role="option"
+														aria-selected={index === skillActive}
+														className={`omp-skill-suggest-item ${
+															index === skillActive ? "active" : ""
+														}`}
+														onMouseEnter={() => setSkillActive(index)}
+														onClick={() => applySkill(skill.name)}
+													>
+														<span className="omp-skill-suggest-icon">
+															{skill.name.slice(0, 1).toUpperCase()}
+														</span>
+														<span className="omp-skill-suggest-main">
+															<strong>{skill.name}</strong>
+															<span>{skill.description}</span>
+														</span>
+													</button>
+												))
+											)}
+										</div>
+									)}
+									<div className="omp-composer-input">
+										{skillChips.length > 0 && (
+											<div className="omp-skill-chips">
+												{skillChips.map((name) => (
+													<span className="omp-skill-chip" key={name}>
+														<button
+															type="button"
+															className="omp-skill-chip-remove"
+															onClick={() =>
+																setSkillChips((prev) => prev.filter((item) => item !== name))
+															}
+															aria-label={`移除技能 ${name}`}
+															title="移除技能"
+														>
+															<Icon name="close" size={10} />
+														</button>
+														<span>{name}</span>
+													</span>
+												))}
+											</div>
+										)}
+										<textarea
+											ref={inputRef}
+											value={input}
+											onChange={(event) => {
+												const value = event.target.value;
+												setInput(value);
+												updateSkillSuggest(value, event.target.selectionStart ?? value.length);
+											}}
+											onKeyDown={(event) => {
+												if (skillSuggestOpen && skillSuggestions.length > 0) {
+													if (event.key === "ArrowDown") {
+														event.preventDefault();
+														setSkillActive((current) => (current + 1) % skillSuggestions.length);
+														return;
+													}
+													if (event.key === "ArrowUp") {
+														event.preventDefault();
+														setSkillActive(
+															(current) =>
+																(current - 1 + skillSuggestions.length) % skillSuggestions.length,
+														);
+														return;
+													}
+													if (event.key === "Enter" || event.key === "Tab") {
+														event.preventDefault();
+														const chosen = skillSuggestions[skillActive];
+														if (chosen) applySkill(chosen.name);
+														return;
+													}
+													if (event.key === "Escape") {
+														event.preventDefault();
+														setSkillSuggestOpen(false);
+														return;
+													}
+												}
+												if (event.key === "Enter" && !event.shiftKey) {
+													event.preventDefault();
+													send();
+												}
+											}}
+											placeholder={connected ? "描述任务，按 Enter 发送" : "等待连接 omp…"}
+											disabled={!connected || running}
+											aria-label="任务输入框"
+											onBlur={() => setSkillSuggestOpen(false)}
+										/>
+									</div>
 									<div className="omp-composer-footer">
 										<div className="omp-composer-hint">
 											<button
@@ -2543,6 +2700,15 @@ export function App() {
 											>
 												<Icon name="folder" size={13} />
 												引用文件
+											</button>
+											<button
+												type="button"
+												className="omp-reference"
+												onClick={insertSkillReference}
+												title="输入 / 选择技能指令"
+											>
+												<Icon name="spark" size={13} />
+												技能
 											</button>
 											{currentModeName && (
 												<span className="omp-hint-tag" title="推理档位">
@@ -2989,9 +3155,8 @@ export function App() {
 					cwd={settings.cwd}
 					onClose={() => setShowSkills(false)}
 					onUseSkill={(name) => {
-						setInput((prev) => `${prev}${prev && !prev.endsWith(" ") ? " " : ""}/skill:${name} `);
+						applySkill(name);
 						setShowSkills(false);
-						inputRef.current?.focus();
 					}}
 				/>
 			)}

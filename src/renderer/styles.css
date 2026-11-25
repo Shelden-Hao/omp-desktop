@@ -1448,6 +1448,126 @@ details[open] > summary .omp-fold-chevron {
   cursor: not-allowed;
   opacity: 0.7;
 }
+.omp-composer-input {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.omp-composer-input textarea {
+  flex: 1 1 180px;
+  width: auto;
+  min-width: 180px;
+}
+.omp-skill-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+.omp-skill-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px 3px 4px;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border-subtle));
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+  font-size: var(--font-md);
+  font-weight: 600;
+  line-height: 1.5;
+}
+.omp-skill-chip-remove {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: inherit;
+  cursor: pointer;
+}
+.omp-skill-chip-remove:hover {
+  background: var(--accent);
+  color: var(--surface-panel);
+}
+.omp-skill-suggest {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 30;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-lg);
+}
+.omp-skill-suggest-head {
+  padding: 4px var(--space-2) var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 600;
+}
+.omp-skill-suggest-empty {
+  padding: var(--space-4);
+  color: var(--text-muted);
+  font-size: var(--font-md);
+  text-align: center;
+}
+.omp-skill-suggest-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.omp-skill-suggest-item:hover,
+.omp-skill-suggest-item.active {
+  background: var(--surface-hover);
+}
+.omp-skill-suggest-icon {
+  display: grid;
+  flex: 0 0 26px;
+  place-items: center;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--font-sm);
+  font-weight: 700;
+}
+.omp-skill-suggest-main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.omp-skill-suggest-main strong {
+  flex: none;
+  color: var(--text-primary);
+  font-size: var(--font-md);
+  font-weight: 600;
+}
+.omp-skill-suggest-main > span {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .omp-composer-footer {
   display: flex;
   align-items: center;
