@@ -482,13 +482,17 @@ export function SkillsPanel({ cwd, onClose, onUseSkill }: SkillPanelProps) {
 								{userSkills.length > 0 && (
 									<section className="omp-skill-section">
 										<h4>用户级 · 全局（{userSkills.length}）</h4>
-										<div className="omp-skill-grid">{userSkills.map(renderInstalledCard)}</div>
+										<div className="omp-skill-grid">
+											{userSkills.map((skill) => renderInstalledCard(skill))}
+										</div>
 									</section>
 								)}
 								{projectSkills.length > 0 && (
 									<section className="omp-skill-section">
 										<h4>项目级 · 当前工作目录（{projectSkills.length}）</h4>
-										<div className="omp-skill-grid">{projectSkills.map(renderInstalledCard)}</div>
+										<div className="omp-skill-grid">
+											{projectSkills.map((skill) => renderInstalledCard(skill))}
+										</div>
 									</section>
 								)}
 								{disabledNames.length > 0 && scopeFilter !== "project" && (
