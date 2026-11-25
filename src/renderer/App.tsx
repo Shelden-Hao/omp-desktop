@@ -1271,7 +1271,9 @@ export function App() {
 		const el = inputRef.current;
 		if (!el) return;
 		el.style.height = "auto";
-		el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+		// 单行基准必须锁在 24px（与 chip 同高）：textarea 无 rows 时浏览器按 2 行算 scrollHeight=48，
+		// 会把盒子撑高一倍，flex 居中后文字看起来比 chip 低半行。
+		el.style.height = `${Math.min(Math.max(el.scrollHeight, 24), 160)}px`;
 	}, [input]);
 
 	const updateMessages = useCallback(
@@ -2646,6 +2648,7 @@ export function App() {
 										)}
 										<textarea
 											ref={inputRef}
+											rows={1}
 											value={input}
 											onChange={(event) => {
 												const value = event.target.value;
