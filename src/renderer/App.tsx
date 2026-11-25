@@ -16,7 +16,7 @@ import type {
 	SessionState,
 	SkillSummary,
 } from "../shared/types";
-import { AcpClient, normalizeSessionState } from "./core/acp/client";
+import { AcpClient, isStaleSessionError, normalizeSessionState } from "./core/acp/client";
 import {
 	chipBeforeCaret,
 	chipFromEventTarget,
@@ -157,6 +157,8 @@ export function App() {
 	const toolIndex = useRef<Map<string, number>>(new Map());
 	const activeIdRef = useRef<string | null>(null);
 	const loadedSessions = useRef<Set<string>>(new Set());
+	/** 消息镜像：loadSessionHistory 清空前先留一份，omp 回放不出历史时用它兜底 */
+	const messagesRef = useRef<Record<string, ChatMessage[]>>({});
 	const pendingPermissionRef = useRef<PermissionState | null>(null);
 	const cancelledSessionRef = useRef<string | null>(null);
 	const runningRef = useRef(false);
@@ -755,11 +757,22 @@ export function App() {
 	const loadSessionHistory = useCallback(async (acp: AcpClient, sessionId: string, cwd: string) => {
 		if (loadedSessions.current.has(sessionId)) return;
 		loadedSessions.current.add(sessionId);
+		const local = messagesRef.current[sessionId] ?? [];
 		setMessagesBySession((prev) => ({ ...prev, [sessionId]: [] }));
 		try {
 			const loaded = await acp.loadSession(sessionId, cwd);
 			setSessionStates((prev) => ({ ...prev, [sessionId]: normalizeSessionState(loaded) }));
+			// omp 重启后常常回放不出内容，这时宁可显示本地已有的对话，也不要给用户一片空白
+			setMessagesBySession((prev) =>
+				prev[sessionId]?.length || local.length === 0 ? prev : { ...prev, [sessionId]: local },
+			);
 		} catch (error) {
+			setMessagesBySession((prev) => ({ ...prev, [sessionId]: local }));
+			// omp 重启后旧 sessionId 不再存在：历史捞不回来，但会话仍可用（发消息时自动重绑）
+			if (isStaleSessionError(error)) {
+				setStatus("该会话在 omp 重启前创建，历史无法恢复；发送消息会自动新建会话");
+				return;
+			}
 			setStatus(`恢复会话失败：${(error as Error).message}`);
 		}
 	}, []);
@@ -1058,6 +1071,10 @@ export function App() {
 
 	// 切换会话（含启动、新建）默认从底部看起；必须在布局阶段重置，否则本次提交的跟随判断会用到旧值
 	useLayoutEffect(() => {
+		messagesRef.current = messagesBySession;
+	}, [messagesBySession]);
+
+	useLayoutEffect(() => {
 		atBottomRef.current = true;
 		setAtBottom(true);
 	}, [activeId]);
@@ -1069,6 +1086,31 @@ export function App() {
 		// 跟随 messages 引用而非 length：流式文本是原地追加到同一个 agent 消息里的，长度不变
 		el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
 	}, [messages, permission, running, logAudit]);
+
+	/**
+	 * 把界面上的会话绑到 omp 里新建的 session 上。
+	 * omp 重启后旧 sessionId 会失效，直接报错会让用户「没法对话」，这里保留标题与本地消息，
+	 * 只把 id 换掉，后续请求走新 session。
+	 */
+	const rebindSession = async (acp: AcpClient, oldId: string, cwd: string) => {
+		const created = await acp.newSession(cwd);
+		const newId = created.sessionId;
+		const nextSessions = sessions.map((item) =>
+			item.id === oldId ? { ...item, id: newId } : item,
+		);
+		setSessions(nextSessions);
+		void persistSessions(nextSessions);
+		setSessionStates((prev) => ({ ...prev, [newId]: normalizeSessionState(created) }));
+		setMessagesBySession((prev) => {
+			const next = { ...prev };
+			next[newId] = next[oldId] ?? [];
+			delete next[oldId];
+			return next;
+		});
+		loadedSessions.current.add(newId);
+		setActiveId(newId);
+		return newId;
+	};
 
 	const send = async (override?: string, confirmed = false) => {
 		// inline chip 已在 readEditorText 里还原成 omp 认识的 /skill:<name>；重试走 override 不再读输入区
@@ -1105,14 +1147,24 @@ export function App() {
 		]);
 		runningRef.current = true;
 		setRunning(true);
+		const sessionCwd = sessions.find((item) => item.id === sessionId)?.cwd || settings.cwd;
+		// omp 重启后这个会话可能已失效，绑定 id 跟着重绑结果走，消息落到真正发出请求的会话上
+		let boundId = sessionId;
 		try {
-			await client.prompt(sessionId, text);
+			try {
+				await client.prompt(boundId, text);
+			} catch (error) {
+				if (!isStaleSessionError(error)) throw error;
+				setStatus("原会话在 omp 重启后失效，已新建会话继续");
+				boundId = await rebindSession(client, sessionId, sessionCwd);
+				await client.prompt(boundId, text);
+			}
 		} catch (error) {
 			if (cancelledSessionRef.current === sessionId) {
 				cancelledSessionRef.current = null;
 				return;
 			}
-			updateMessages(sessionId, (prev) => [
+			updateMessages(boundId, (prev) => [
 				...prev,
 				{
 					id: uid(),
@@ -1123,7 +1175,7 @@ export function App() {
 			]);
 		} finally {
 			if (cancelledSessionRef.current === sessionId) cancelledSessionRef.current = null;
-			updateMessages(sessionId, (prev) => {
+			updateMessages(boundId, (prev) => {
 				const now = Date.now();
 				const copy = prev.map((item) =>
 					item.id === userMessageId ? { ...item, durationMs: now - startedAt } : item,
@@ -1140,7 +1192,7 @@ export function App() {
 			setRunning(false);
 			editor.focus();
 			// 一轮结束后刷新上下文占用（工具输出、消息都会变化）
-			void probeContext(sessionId);
+			void probeContext(boundId);
 		}
 	};
 

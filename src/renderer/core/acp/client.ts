@@ -237,3 +237,12 @@ export class AcpClient {
     this.notify("session/cancel", { sessionId });
   }
 }
+
+/**
+ * omp 进程重启后旧 sessionId 会失效，ACP 用 -32002 `Resource not found` 表示。
+ * 外壳据此把会话透明地绑到新 session 上，而不是把协议错误直接甩给用户。
+ */
+export function isStaleSessionError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /resource not found/i.test(message) || message.includes("-32002");
+}
