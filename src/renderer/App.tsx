@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
 	AcpClient,
 	type AcpEvent,
@@ -1156,7 +1156,8 @@ export function App() {
 	const scrollToBottom = () => {
 		const el = scrollRef.current;
 		if (!el) return;
-		el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+		// 不用 smooth：动画中间帧会触发 onScroll，把尚未到底的瞬间误判成用户离开了底部
+		el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
 		atBottomRef.current = true;
 		setAtBottom(true);
 	};
@@ -1655,10 +1656,19 @@ export function App() {
 		return () => acp.stop();
 	}, [agentEpoch, handleEvent, loadSessionHistory, persistSessions, probeContext]);
 
-	useEffect(() => {
+	// 切换会话（含启动、新建）默认从底部看起；必须在布局阶段重置，否则本次提交的跟随判断会用到旧值
+	useLayoutEffect(() => {
+		atBottomRef.current = true;
+		setAtBottom(true);
+	}, [activeId]);
+
+	useLayoutEffect(() => {
 		if (!atBottomRef.current) return;
-		scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-	}, [messages.length, permission, running]);
+		const el = scrollRef.current;
+		if (!el) return;
+		// 跟随 messages 引用而非 length：流式文本是原地追加到同一个 agent 消息里的，长度不变
+		el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
+	}, [messages, permission, running]);
 
 	const send = async (override?: string) => {
 		const text = (override ?? input).trim();
