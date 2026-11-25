@@ -1,9 +1,4 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type {
-	FormEvent as ReactFormEvent,
-	KeyboardEvent as ReactKeyboardEvent,
-	MouseEvent as ReactMouseEvent,
-} from "react";
 import type { AcpEvent } from "../shared/protocol";
 import type {
 	ApprovalMode,
@@ -14,25 +9,12 @@ import type {
 	DesktopSettings,
 	McpConfigInfo,
 	SessionState,
-	SkillSummary,
 } from "../shared/types";
 import { AcpClient, isStaleSessionError, normalizeSessionState } from "./core/acp/client";
-import {
-	chipBeforeCaret,
-	chipFromEventTarget,
-	focusEditor,
-	getEditorRange,
-	insertResourceChip,
-	insertSkillChip,
-	insertTextAtCursor,
-	readDraft,
-	readEditorText,
-	readSkillChips,
-	removeChip,
-} from "./core/composer/editor";
 import { parseContextReport } from "./core/context-report";
 import { Icon } from "./components/common/Icon";
 import {
+	filterSessions,
 	type Session,
 	type SidebarView,
 	type StatusFilter,
@@ -47,18 +29,22 @@ import { Sidebar } from "./components/layout/Sidebar";
 import { TitleBar } from "./components/layout/TitleBar";
 import { PermissionDialog } from "./components/modals/PermissionDialog";
 import { SensitiveDialog } from "./components/modals/SensitiveDialog";
-import { DEFAULT_DOCS, type DocFile } from "./core/docs";
-import { pickLabel } from "./core/format";
-import { APPROVAL_LABEL, THINKING_LABEL } from "./core/labels";
-import {
-	extractPathsFromMessages,
-	extractUrlsFromMessages,
-	urlLabel,
-	type ResourceCandidate,
-} from "./core/resources";
+import { buildModelRows, readModelCapabilities } from "./core/model-rows";
+import { APPROVAL_LABEL } from "./core/labels";
 import { detectSensitive } from "./core/security/sensitive";
+import {
+	appendBlock as reduceAppendBlock,
+	appendUserChunk as reduceAppendUserChunk,
+	stampDurations,
+	updateToolBlock,
+} from "./core/session-reducer";
 import { extractText, formatToolInput } from "./core/tool-input";
-import { SettingsPanel } from "./panels/SettingsPanel";
+import { useChatDocs } from "./hooks/use-chat-docs";
+import { useChatScroll } from "./hooks/use-chat-scroll";
+import { useComposerEditor } from "./hooks/use-composer-editor";
+import { useDismiss } from "./hooks/use-dismiss";
+import { useSessionSearch } from "./hooks/use-session-search";
+import { SettingsPanel } from "./panels/settings";
 import { SkillsPanel } from "./panels/SkillsPanel";
 
 interface PermissionState {
@@ -75,7 +61,6 @@ export function App() {
 	const [sessions, setSessions] = useState<Session[]>([]);
 	const [activeId, setActiveId] = useState<string | null>(null);
 	const [messagesBySession, setMessagesBySession] = useState<Record<string, ChatMessage[]>>({});
-	const [input, setInput] = useState("");
 	const [running, setRunning] = useState(false);
 	const [connected, setConnected] = useState(false);
 	const [status, setStatus] = useState("准备连接 omp…");
@@ -113,19 +98,11 @@ export function App() {
 	const [permission, setPermission] = useState<PermissionState | null>(null);
 	/** 敏感信息拦截：命中后暂停发送，等用户确认 */
 	const [sensitiveHit, setSensitiveHit] = useState<{ label: string; text: string } | null>(null);
-	const [docs, setDocs] = useState<DocFile[]>(DEFAULT_DOCS);
-	const [activeDoc, setActiveDoc] = useState<string | null>(null);
-	const [showPreview, setShowPreview] = useState(true);
 	const [sidebarView, setSidebarView] = useState<SidebarView>("recent");
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 	const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 	const [timeFilter, setTimeFilter] = useState<TimeFilter>("all");
 	const [filterOpen, setFilterOpen] = useState(false);
-	const [searchOpen, setSearchOpen] = useState(false);
-	const [searchText, setSearchText] = useState("");
-	const [searchIndex, setSearchIndex] = useState(0);
-	const [searchHitCount, setSearchHitCount] = useState(0);
-	const [atBottom, setAtBottom] = useState(true);
 	const [sessionStates, setSessionStates] = useState<Record<string, SessionState>>({});
 	const [modelMenuOpen, setModelMenuOpen] = useState(false);
 	const [modelContexts, setModelContexts] = useState<Record<string, number>>({});
@@ -134,24 +111,11 @@ export function App() {
 	const [agentEpoch, setAgentEpoch] = useState(0);
 	const [contextOpen, setContextOpen] = useState(false);
 	const [contextReports, setContextReports] = useState<Record<string, ContextReport>>({});
-	const [skillChips, setSkillChips] = useState<string[]>([]);
-	const [skillSuggestOpen, setSkillSuggestOpen] = useState(false);
-	const [skillQuery, setSkillQuery] = useState("");
-	const [skillActive, setSkillActive] = useState(0);
-	const [installedSkills, setInstalledSkills] = useState<SkillSummary[]>([]);
-	const [resourceSuggestOpen, setResourceSuggestOpen] = useState(false);
-	const [resourceQuery, setResourceQuery] = useState("");
-	const [resourceActive, setResourceActive] = useState(0);
 	const [entryMenuOpen, setEntryMenuOpen] = useState(false);
 	const [entrySubmenu, setEntrySubmenu] = useState<EntrySubmenu>(null);
 	const [mcpConfig, setMcpConfig] = useState<McpConfigInfo | null>(null);
 	const entryMenuRef = useRef<HTMLSpanElement>(null);
 
-	const scrollRef = useRef<HTMLDivElement>(null);
-	/** 输入框是非受控 contenteditable：DOM 是内容真相源，React state 只做镜像用于按钮/联想 */
-	const editorRef = useRef<HTMLDivElement>(null);
-	const composingRef = useRef(false);
-	const searchInputRef = useRef<HTMLInputElement>(null);
 	const filterRef = useRef<HTMLSpanElement>(null);
 	const clientRef = useRef<AcpClient | null>(null);
 	const toolIndex = useRef<Map<string, number>>(new Map());
@@ -162,7 +126,6 @@ export function App() {
 	const pendingPermissionRef = useRef<PermissionState | null>(null);
 	const cancelledSessionRef = useRef<string | null>(null);
 	const runningRef = useRef(false);
-	const atBottomRef = useRef(true);
 	/** 正在静默采集 `/context` 输出时指向该会话，期间的 chunk 不进对话 */
 	const silentContextRef = useRef<{ sessionId: string; text: string } | null>(null);
 	const contextBusyRef = useRef(false);
@@ -175,168 +138,59 @@ export function App() {
 		() => (activeId ? messagesBySession[activeId] || [] : []),
 		[activeId, messagesBySession],
 	);
-	const visibleMessages = messages;
 
-	// 每次打开联想都重新读 omp 技能列表，这样面板里新装/卸载的技能即刻生效
-	useEffect(() => {
-		if (!skillSuggestOpen) return;
-		let cancelled = false;
-		void window.desktop.skills.list().then((reply) => {
-			if (!cancelled && reply.ok && reply.data) setInstalledSkills(reply.data.skills);
-		});
-		return () => {
-			cancelled = true;
-		};
-	}, [skillSuggestOpen]);
+	// 视图态各自成 hook：输入区、对话内搜索、右侧预览、消息滚动，App 只负责装配
+	const docsState = useChatDocs(setStatus);
+	const search = useSessionSearch(messages);
+	const composer = useComposerEditor({
+		docs: docsState.docs,
+		messages,
+		onSubmit: () => void send(),
+	});
+	const scroll = useChatScroll({
+		activeId,
+		messages,
+		running,
+		permissionOpen: Boolean(permission),
+	});
+	// 设置候选技能用的是 state setter，本身稳定，单独取出来避免把整个 composer 对象塞进依赖
+	const { setInstalledSkills } = composer;
 
-	const skillSuggestions = useMemo(() => {
-		const query = skillQuery.trim().toLowerCase();
-		const matched = query
-			? installedSkills.filter(
-					(skill) =>
-						skill.name.toLowerCase().includes(query) ||
-						skill.description.toLowerCase().includes(query),
-				)
-			: installedSkills;
-		return matched.filter((skill) => !skillChips.includes(skill.name)).slice(0, 8);
-	}, [installedSkills, skillQuery, skillChips]);
-
-	// @ 联想候选全部来自真实数据：已打开文档、本会话工具调用出现过的路径、本会话出现过的网址、用户键入的网址
-	const resourceCandidates = useMemo<ResourceCandidate[]>(() => {
-		const query = resourceQuery.trim().toLowerCase();
-		const list: ResourceCandidate[] = [];
-		for (const doc of docs) {
-			if (!doc.path) continue;
-			list.push({
-				value: doc.path.includes(" ") ? `@"${doc.path}"` : `@${doc.path}`,
-				label: doc.name,
-				group: "对话中的文件",
-				detail: doc.path,
-			});
-		}
-		for (const path of extractPathsFromMessages(messages)) {
-			list.push({
-				value: path.includes(" ") ? `@"${path}"` : `@${path}`,
-				label: path.split(/[\\/]/).pop() || path,
-				group: "对话中的资源",
-				detail: path,
-			});
-		}
-		const typed = resourceQuery.trim();
-		if (/^https?:\/\/\S+\.\S+/.test(typed)) {
-			list.push({ value: typed, label: urlLabel(typed), group: "网址", detail: typed });
-		}
-		for (const url of extractUrlsFromMessages(messages)) {
-			list.push({ value: url, label: urlLabel(url), group: "网址", detail: url });
-		}
-		// 同一路径可能同时出现在文档和工具调用里，只保留首次出现的分组
-		const seen = new Set<string>();
-		const unique = list.filter((item) => {
-			if (seen.has(item.value)) return false;
-			seen.add(item.value);
-			return true;
-		});
-		return (
-			query
-				? unique.filter(
-						(item) =>
-							item.label.toLowerCase().includes(query) || item.detail.toLowerCase().includes(query),
-					)
-				: unique
-		).slice(0, 12);
-	}, [docs, messages, resourceQuery]);
-
-	const currentDoc = docs.find((doc) => doc.key === activeDoc);
 	const filtersActive = statusFilter !== "all" || timeFilter !== "all";
 	const report = activeId ? contextReports[activeId] : undefined;
 	const contextPercent = report ? Math.min(100, Math.max(0, report.percent)) : 0;
 
 	// omp 不返回任务状态，这里按本地会话数据推导，避免展示没有依据的状态
-	const filteredSessions = useMemo(() => {
-		const now = Date.now();
-		const startOfToday = new Date(now);
-		startOfToday.setHours(0, 0, 0, 0);
+	const filteredSessions = useMemo(
+		() =>
+			filterSessions({
+				sessions,
+				messagesBySession,
+				statusFilter,
+				timeFilter,
+				running,
+				activeId,
+			}),
+		[sessions, statusFilter, timeFilter, messagesBySession, running, activeId],
+	);
 
-		const matchTime = (ts?: number) => {
-			if (timeFilter === "all") return true;
-			if (!ts) return false;
-			if (timeFilter === "today") return ts >= startOfToday.getTime();
-			if (timeFilter === "week") return ts >= now - 7 * 86_400_000;
-			return ts >= now - 30 * 86_400_000;
-		};
-
-		const statusOf = (session: Session): StatusFilter => {
-			if (running && session.id === activeId) return "running";
-			const list = messagesBySession[session.id];
-			// 未打开过的历史会话没有本地缓存，按已完成处理
-			if (!list) return "done";
-			if (!list.length) return "planned";
-			const last = list[list.length - 1];
-			if (last.role === "system") return "failed";
-			if (last.role === "user") return "pending";
-			return "done";
-		};
-
-		return sessions.filter(
-			(session) =>
-				matchTime(session.ts) && (statusFilter === "all" || statusOf(session) === statusFilter),
-		);
-	}, [sessions, statusFilter, timeFilter, messagesBySession, running, activeId]);
-
-	useEffect(() => {
-		if (!filterOpen) return;
-		const onPointerDown = (event: MouseEvent) => {
-			if (!filterRef.current?.contains(event.target as Node)) setFilterOpen(false);
-		};
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape") setFilterOpen(false);
-		};
-		document.addEventListener("mousedown", onPointerDown);
-		document.addEventListener("keydown", onKeyDown);
-		return () => {
-			document.removeEventListener("mousedown", onPointerDown);
-			document.removeEventListener("keydown", onKeyDown);
-		};
-	}, [filterOpen]);
-
+	useDismiss(filterOpen, {
+		ref: filterRef,
+		onDismiss: () => setFilterOpen(false),
+	});
 	// 安全等级下拉与上下文面板：点击外部或 Esc 关闭
-	useEffect(() => {
-		if (!approvalOpen && !contextOpen) return;
-		const onPointerDown = (event: MouseEvent) => {
-			const target = event.target as Node;
-			if (approvalOpen && !approvalRef.current?.contains(target)) setApprovalOpen(false);
-			if (contextOpen && !contextRef.current?.contains(target)) setContextOpen(false);
-		};
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key !== "Escape") return;
-			setApprovalOpen(false);
-			setContextOpen(false);
-		};
-		document.addEventListener("mousedown", onPointerDown);
-		document.addEventListener("keydown", onKeyDown);
-		return () => {
-			document.removeEventListener("mousedown", onPointerDown);
-			document.removeEventListener("keydown", onKeyDown);
-		};
-	}, [approvalOpen, contextOpen]);
+	useDismiss(approvalOpen, {
+		ref: approvalRef,
+		onDismiss: () => setApprovalOpen(false),
+	});
+	useDismiss(contextOpen, {
+		ref: contextRef,
+		onDismiss: () => setContextOpen(false),
+	});
 
-	// 聚合入口：点击外部或 Esc 关闭；打开时刷新技能与 MCP 配置
+	// 聚合入口：打开时刷新技能与 MCP 配置，关闭交给 useDismiss
 	useEffect(() => {
 		if (!entryMenuOpen) return;
-		const onPointerDown = (event: MouseEvent) => {
-			if (!entryMenuRef.current?.contains(event.target as Node)) {
-				setEntryMenuOpen(false);
-				setEntrySubmenu(null);
-			}
-		};
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape") {
-				setEntryMenuOpen(false);
-				setEntrySubmenu(null);
-			}
-		};
-		document.addEventListener("mousedown", onPointerDown);
-		document.addEventListener("keydown", onKeyDown);
 		void window.desktop.skills.list().then((reply) => {
 			if (reply.ok && reply.data) setInstalledSkills(reply.data.skills);
 		});
@@ -344,11 +198,13 @@ export function App() {
 			.list()
 			.then(setMcpConfig)
 			.catch(() => setMcpConfig(null));
-		return () => {
-			document.removeEventListener("mousedown", onPointerDown);
-			document.removeEventListener("keydown", onKeyDown);
-		};
-	}, [entryMenuOpen]);
+	}, [entryMenuOpen, setInstalledSkills]);
+
+	const closeEntryMenu = () => {
+		setEntryMenuOpen(false);
+		setEntrySubmenu(null);
+	};
+	useDismiss(entryMenuOpen, { ref: entryMenuRef, onDismiss: closeEntryMenu });
 
 	// 模型面板打开时刷新一次容量信息（用户可能刚在设置里加过自定义模型）
 	useEffect(() => {
@@ -372,90 +228,14 @@ export function App() {
 		};
 	}, [modelMenuOpen]);
 
-	useEffect(() => {
-		if (!modelMenuOpen) return;
-		const onPointerDown = (event: MouseEvent) => {
-			const target = event.target as HTMLElement | null;
-			if (target?.closest(".omp-model-panel") || target?.closest(".omp-model-trigger")) return;
-			setModelMenuOpen(false);
-		};
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape") setModelMenuOpen(false);
-		};
-		document.addEventListener("mousedown", onPointerDown);
-		document.addEventListener("keydown", onKeyDown);
-		return () => {
-			document.removeEventListener("mousedown", onPointerDown);
-			document.removeEventListener("keydown", onKeyDown);
-		};
-	}, [modelMenuOpen]);
-
-	const updateAtBottom = () => {
-		const el = scrollRef.current;
-		if (!el) return;
-		const next = el.scrollHeight - el.scrollTop - el.clientHeight <= 24;
-		atBottomRef.current = next;
-		setAtBottom(next);
-	};
-
-	const scrollToBottom = () => {
-		const el = scrollRef.current;
-		if (!el) return;
-		// 不用 smooth：动画中间帧会触发 onScroll，把尚未到底的瞬间误判成用户离开了底部
-		el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
-		atBottomRef.current = true;
-		setAtBottom(true);
-	};
-
-	const jumpSearch = (delta: number) => {
-		if (!searchHitCount) return;
-		setSearchIndex((current) => (current + delta + searchHitCount) % searchHitCount);
-	};
-
-	useEffect(() => {
-		if (!searchOpen || !searchText.trim()) {
-			setSearchHitCount(0);
-			return;
-		}
-		const marks = document.querySelectorAll("mark[data-search-hit]");
-		setSearchHitCount(marks.length);
-		setSearchIndex((current) => (marks.length ? current % marks.length : 0));
-	}, [searchOpen, searchText, messages]);
-
-	useEffect(() => {
-		const marks = Array.from(document.querySelectorAll<HTMLElement>("mark[data-search-hit]"));
-		marks.forEach((mark) => mark.classList.remove("omp-search-hit-active"));
-		if (!searchOpen || !searchText.trim() || !marks.length) return;
-		const active = marks[searchIndex % marks.length];
-		active.classList.add("omp-search-hit-active");
-		const fold = active.closest("details.omp-process-fold");
-		if (fold) fold.setAttribute("open", "");
-		requestAnimationFrame(() => {
-			active.scrollIntoView({ block: "center", behavior: "smooth" });
-		});
-	}, [searchOpen, searchText, searchIndex, searchHitCount]);
+	useDismiss(modelMenuOpen, {
+		ignore: [".omp-model-panel", ".omp-model-trigger"],
+		onDismiss: () => setModelMenuOpen(false),
+	});
 
 	useEffect(() => {
 		activeIdRef.current = activeId;
 	}, [activeId]);
-
-	useEffect(() => {
-		const onKeyDown = (event: KeyboardEvent) => {
-			if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
-				event.preventDefault();
-				setSearchOpen(true);
-				requestAnimationFrame(() => {
-					searchInputRef.current?.focus();
-					searchInputRef.current?.select();
-				});
-			} else if (event.key === "Escape" && searchOpen) {
-				setSearchOpen(false);
-				setSearchText("");
-			}
-		};
-		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [searchOpen]);
 
 	useEffect(() => {
 		pendingPermissionRef.current = permission;
@@ -492,135 +272,6 @@ export function App() {
 		document.documentElement.style.setProperty("--font-scale", String(settings.fontScale || 1));
 	}, [settings.fontScale]);
 
-	// ---------- 非受控 contenteditable 输入区 ----------
-	// DOM 操作全部在 core/composer/editor.ts；这里只负责把 DOM 结果同步到 React state。
-	const editor = {
-		text: () => readEditorText(editorRef.current),
-		chips: () => readSkillChips(editorRef.current),
-		range: () => getEditorRange(editorRef.current),
-		focus: () => focusEditor(editorRef.current),
-		insertText: (text: string) => insertTextAtCursor(editorRef.current, text),
-		insertSkill: (name: string) => insertSkillChip(editorRef.current, name),
-		insertResource: (candidate: ResourceCandidate) =>
-			insertResourceChip(editorRef.current, candidate),
-		remove: (chip: HTMLElement) => removeChip(editorRef.current, chip),
-		clear: () => {
-			if (editorRef.current) editorRef.current.innerHTML = "";
-		},
-	};
-
-	const syncFromEditor = () => {
-		setInput(editor.text());
-		setSkillChips(editor.chips());
-	};
-
-	const applyResource = (candidate: ResourceCandidate) => {
-		editor.insertResource(candidate);
-		setResourceSuggestOpen(false);
-		setResourceQuery("");
-		syncFromEditor();
-		editor.focus();
-	};
-
-	const onEditorInput = () => {
-		if (composingRef.current) return;
-		syncFromEditor();
-		const draft = readDraft(editor.range());
-		// @ 优先：@ 里可能出现的 / 不应被当成技能指令
-		setResourceSuggestOpen(draft.resource !== null);
-		setResourceQuery(draft.resource ?? "");
-		setResourceActive(0);
-		setSkillSuggestOpen(draft.skill !== null);
-		setSkillQuery(draft.skill ?? "");
-		setSkillActive(0);
-	};
-
-	const onEditorBeforeInput = (event: ReactFormEvent<HTMLDivElement>) => {
-		// 换行统一写成文本节点里的 \n，配合 white-space: pre-wrap；避免出现 div/br 打乱序列化
-		const inputType = (event.nativeEvent as InputEvent).inputType;
-		if (inputType === "insertParagraph" || inputType === "insertLineBreak") {
-			event.preventDefault();
-			editor.insertText("\n");
-			syncFromEditor();
-		}
-	};
-
-	const onEditorMouseDown = (event: ReactMouseEvent<HTMLDivElement>) => {
-		const chip = chipFromEventTarget(event.target as HTMLElement);
-		if (!chip) return;
-		event.preventDefault();
-		editor.remove(chip);
-		syncFromEditor();
-	};
-
-	const onEditorKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-		if (resourceSuggestOpen && resourceCandidates.length > 0) {
-			if (event.key === "ArrowDown") {
-				event.preventDefault();
-				setResourceActive((current) => (current + 1) % resourceCandidates.length);
-				return;
-			}
-			if (event.key === "ArrowUp") {
-				event.preventDefault();
-				setResourceActive(
-					(current) => (current - 1 + resourceCandidates.length) % resourceCandidates.length,
-				);
-				return;
-			}
-			if (event.key === "Enter" || event.key === "Tab") {
-				event.preventDefault();
-				const chosen = resourceCandidates[resourceActive];
-				if (chosen) applyResource(chosen);
-				return;
-			}
-			if (event.key === "Escape") {
-				event.preventDefault();
-				setResourceSuggestOpen(false);
-				return;
-			}
-		}
-		if (skillSuggestOpen && skillSuggestions.length > 0) {
-			if (event.key === "ArrowDown") {
-				event.preventDefault();
-				setSkillActive((current) => (current + 1) % skillSuggestions.length);
-				return;
-			}
-			if (event.key === "ArrowUp") {
-				event.preventDefault();
-				setSkillActive(
-					(current) => (current - 1 + skillSuggestions.length) % skillSuggestions.length,
-				);
-				return;
-			}
-			if (event.key === "Enter" || event.key === "Tab") {
-				event.preventDefault();
-				const chosen = skillSuggestions[skillActive];
-				if (chosen) applySkill(chosen.name);
-				return;
-			}
-			if (event.key === "Escape") {
-				event.preventDefault();
-				setSkillSuggestOpen(false);
-				return;
-			}
-		}
-		if (event.key === "Backspace") {
-			const range = editor.range();
-			const hit = range ? chipBeforeCaret(range) : null;
-			if (hit) {
-				event.preventDefault();
-				if (hit.blank) hit.blank.parentNode?.removeChild(hit.blank);
-				editor.remove(hit.chip);
-				syncFromEditor();
-				return;
-			}
-		}
-		if (event.key === "Enter" && !event.shiftKey) {
-			event.preventDefault();
-			void send();
-		}
-	};
-
 	const updateMessages = useCallback(
 		(sessionId: string, updater: (prev: ChatMessage[]) => ChatMessage[]) => {
 			setMessagesBySession((prev) => ({ ...prev, [sessionId]: updater(prev[sessionId] || []) }));
@@ -631,28 +282,9 @@ export function App() {
 	const appendBlock = useCallback(
 		(sessionId: string, block: ContentBlock, toolCallId?: string) => {
 			updateMessages(sessionId, (prev) => {
-				const copy = [...prev];
-				let index = copy.length - 1;
-				if (index < 0 || copy[index].role !== "agent") {
-					copy.push({ id: uid(), role: "agent", blocks: [], ts: Date.now() });
-					index = copy.length - 1;
-				}
-				const message = copy[index];
-				const blocks = [...message.blocks];
-				const last = blocks[blocks.length - 1];
-				const canMergeText =
-					!toolCallId &&
-					last &&
-					last.type === block.type &&
-					(block.type === "text" || block.type === "thinking");
-				if (canMergeText) {
-					blocks[blocks.length - 1] = { ...last, text: last.text + block.text };
-				} else {
-					blocks.push(block);
-				}
-				copy[index] = { ...message, blocks };
+				const { messages: next, index } = reduceAppendBlock(prev, block);
 				if (toolCallId) toolIndex.current.set(`${sessionId}:${toolCallId}`, index);
-				return copy;
+				return next;
 			});
 		},
 		[updateMessages],
@@ -660,23 +292,7 @@ export function App() {
 
 	const appendUserChunk = useCallback(
 		(sessionId: string, text: string) => {
-			updateMessages(sessionId, (prev) => {
-				const copy = [...prev];
-				const last = copy[copy.length - 1];
-				if (last?.role === "user") {
-					const blocks = [...last.blocks];
-					const tail = blocks[blocks.length - 1];
-					if (tail?.type === "text") {
-						blocks[blocks.length - 1] = { ...tail, text: tail.text + text };
-					} else {
-						blocks.push({ type: "text", text });
-					}
-					copy[copy.length - 1] = { ...last, blocks };
-					return copy;
-				}
-				copy.push({ id: uid(), role: "user", blocks: [{ type: "text", text }], ts: Date.now() });
-				return copy;
-			});
+			updateMessages(sessionId, (prev) => reduceAppendUserChunk(prev, text));
 		},
 		[updateMessages],
 	);
@@ -691,25 +307,9 @@ export function App() {
 		) => {
 			const index = toolIndex.current.get(`${sessionId}:${toolCallId}`);
 			if (index === undefined) return;
-			updateMessages(sessionId, (prev) => {
-				const copy = [...prev];
-				const message = copy[index];
-				if (!message) return prev;
-				copy[index] = {
-					...message,
-					blocks: message.blocks.map((block) =>
-						block.type === "tool_call" && block.text === toolCallId
-							? {
-									...block,
-									status: next,
-									result: result || block.result,
-									title: title || block.title,
-								}
-							: block,
-					),
-				};
-				return copy;
-			});
+			updateMessages(sessionId, (prev) =>
+				updateToolBlock(prev, toolCallId, { status: next, result, title }),
+			);
 		},
 		[updateMessages],
 	);
@@ -904,23 +504,9 @@ export function App() {
 							nextTitle,
 						);
 					} else if (nextTitle || result) {
-						updateMessages(sessionId, (prev) => {
-							const copy = [...prev];
-							for (const message of copy) {
-								const idx = message.blocks.findIndex(
-									(b) => b.type === "tool_call" && b.text === toolCallId,
-								);
-								if (idx < 0) continue;
-								const block = message.blocks[idx];
-								message.blocks[idx] = {
-									...block,
-									title: nextTitle || block.title,
-									result: result || block.result,
-								};
-								break;
-							}
-							return copy;
-						});
+						updateMessages(sessionId, (prev) =>
+							updateToolBlock(prev, toolCallId, { title: nextTitle, result }),
+						);
 					}
 				}
 				return;
@@ -1074,19 +660,6 @@ export function App() {
 		messagesRef.current = messagesBySession;
 	}, [messagesBySession]);
 
-	useLayoutEffect(() => {
-		atBottomRef.current = true;
-		setAtBottom(true);
-	}, [activeId]);
-
-	useLayoutEffect(() => {
-		if (!atBottomRef.current) return;
-		const el = scrollRef.current;
-		if (!el) return;
-		// 跟随 messages 引用而非 length：流式文本是原地追加到同一个 agent 消息里的，长度不变
-		el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
-	}, [messages, permission, running, logAudit]);
-
 	/**
 	 * 把界面上的会话绑到 omp 里新建的 session 上。
 	 * omp 重启后旧 sessionId 会失效，直接报错会让用户「没法对话」，这里保留标题与本地消息，
@@ -1114,7 +687,7 @@ export function App() {
 
 	const send = async (override?: string, confirmed = false) => {
 		// inline chip 已在 readEditorText 里还原成 omp 认识的 /skill:<name>；重试走 override 不再读输入区
-		const text = (override ?? editor.text()).trim();
+		const text = (override ?? composer.readText()).trim();
 		// 正在刷新上下文用量时先让出，避免两个 prompt 并发打到同一会话
 		if (!client || !activeId || !text || running || contextBusyRef.current) return;
 		if (!confirmed && settings.sensitiveGuard) {
@@ -1133,14 +706,10 @@ export function App() {
 		const sessionId = activeId;
 		const startedAt = Date.now();
 		const userMessageId = uid();
-		if (override === undefined && editorRef.current) editorRef.current.innerHTML = "";
-		setInput("");
-		setSkillChips([]);
-		setSkillSuggestOpen(false);
-		setResourceSuggestOpen(false);
-		setResourceQuery("");
-		atBottomRef.current = true;
-		setAtBottom(true);
+		if (override === undefined) composer.clear();
+		composer.skillSuggest.close();
+		composer.resourceSuggest.close();
+		scroll.stickToBottom();
 		updateMessages(sessionId, (prev) => [
 			...prev,
 			{ id: userMessageId, role: "user", blocks: [{ type: "text", text }], ts: startedAt },
@@ -1175,22 +744,10 @@ export function App() {
 			]);
 		} finally {
 			if (cancelledSessionRef.current === sessionId) cancelledSessionRef.current = null;
-			updateMessages(boundId, (prev) => {
-				const now = Date.now();
-				const copy = prev.map((item) =>
-					item.id === userMessageId ? { ...item, durationMs: now - startedAt } : item,
-				);
-				for (let i = copy.length - 1; i >= 0; i -= 1) {
-					if (copy[i].role === "agent") {
-						copy[i] = { ...copy[i], durationMs: now - copy[i].ts };
-						break;
-					}
-				}
-				return copy;
-			});
+			updateMessages(boundId, (prev) => stampDurations(prev, userMessageId));
 			runningRef.current = false;
 			setRunning(false);
-			editor.focus();
+			composer.focus();
 			// 一轮结束后刷新上下文占用（工具输出、消息都会变化）
 			void probeContext(boundId);
 		}
@@ -1342,31 +899,11 @@ export function App() {
 		}
 	};
 
-	const openDoc = (name: string, content: string, path?: string, language?: string) => {
-		const key = path || `snippet:${uid()}`;
-		setDocs((prev) => [
-			...prev.filter((doc) => doc.key !== key),
-			{ key, name, content, path, language },
-		]);
-		setActiveDoc(key);
-		setShowPreview(true);
-	};
-
-	const openLocalFile = async () => {
-		try {
-			const file = await window.desktop.files.open();
-			if (!file) return;
-			openDoc(file.name, file.content, file.path, file.language);
-		} catch (error) {
-			setStatus(`打开文件失败：${(error as Error).message}`);
-		}
-	};
-
 	const insertFileReference = async () => {
 		try {
 			const file = await window.desktop.files.open();
 			if (!file) return;
-			applyResource({
+			composer.applyResource({
 				value: file.path.includes(" ") ? `@"${file.path}"` : `@${file.path}`,
 				label: file.name,
 				group: "对话中的文件",
@@ -1377,112 +914,21 @@ export function App() {
 		}
 	};
 
-	const applySkill = (name: string) => {
-		if (!editor.range()) editor.focus();
-		editor.insertSkill(name);
-		setSkillSuggestOpen(false);
-		setSkillQuery("");
-		syncFromEditor();
-		editor.focus();
-	};
-
-	const openResourceSuggest = () => {
-		if (!editor.range()) editor.focus();
-		editor.insertText("@");
-		onEditorInput();
-		editor.focus();
-	};
-
-	const reloadDoc = async () => {
-		if (!currentDoc?.path) return;
-		try {
-			const file = await window.desktop.files.read(currentDoc.path);
-			setDocs((prev) =>
-				prev.map((doc) =>
-					doc.key === currentDoc.key
-						? { ...doc, content: file.content, language: file.language }
-						: doc,
-				),
-			);
-		} catch (error) {
-			setStatus(`刷新文件失败：${(error as Error).message}`);
-		}
-	};
-
-	const closeDoc = (key: string) => {
-		setDocs((prev) => {
-			const next = prev.filter((doc) => doc.key !== key);
-			if (activeDoc === key) setActiveDoc(next[0]?.key || null);
-			return next;
-		});
-	};
-
 	const activeTitle = sessions.find((session) => session.id === activeId)?.title || "新会话";
 	const activeState = activeId ? sessionStates[activeId] : undefined;
-	const modelOption = activeState?.configOptions.find(
-		(option) =>
-			option.category === "model" ||
-			(!option.category &&
-				option.options?.some((item) => /gpt|claude|glm|kimi|qwen|deepseek|model/i.test(item.name))),
-	);
-	const thoughtOption = activeState?.configOptions.find(
-		(option) => option.category === "thought_level",
-	);
-	const otherSelects =
-		activeState?.configOptions.filter(
-			(option) =>
-				option.id !== modelOption?.id &&
-				option.id !== thoughtOption?.id &&
-				option.category !== "mode",
-		) || [];
-	const currentModeName = activeState?.modes?.availableModes.find(
-		(mode) => mode.id === activeState.modes?.currentModeId,
-	)?.name;
-	const currentModelName =
-		modelOption?.options?.find((item) => item.value === modelOption.currentValue)?.name ||
-		modelOption?.currentValue;
-	/** ACP 返回的模型名形如「kcoder-glm-flash · GLM-5.3-Flash」，底部只留型号 */
-	const shortModelName =
-		(currentModelName || "").split("·").pop()?.trim() || currentModelName || "";
+	const capabilities = readModelCapabilities(activeState);
+	const { modelOption, currentModelName, shortModelName } = capabilities;
 
 	// 模型详情面板只列模型相关能力；运行模式已移到输入区的「添加」聚合菜单
-	const modelRows: ModelRow[] = [];
-	if (thoughtOption?.options && thoughtOption.options.length > 0) {
-		modelRows.push({
-			id: thoughtOption.id,
-			label: "思考强度",
-			valueLabel: pickLabel(THINKING_LABEL, thoughtOption.currentValue),
-			currentValue: thoughtOption.currentValue,
-			options: thoughtOption.options.map((item) => ({
-				value: item.value,
-				label: pickLabel(THINKING_LABEL, item.value, item.name),
-			})),
-			onSelect: (value) => void changeConfigOption(thoughtOption.id, value),
-		});
-	}
-	for (const option of otherSelects) {
-		if (option.type === "boolean") {
-			modelRows.push({
-				id: option.id,
-				label: option.name,
-				valueLabel: option.currentBoolean ? "已开启" : "已关闭",
-				onSelect: () => void changeConfigOption(option.id, !option.currentBoolean),
-			});
-			continue;
-		}
-		if (!option.options || option.options.length === 0) continue;
-		modelRows.push({
-			id: option.id,
-			label: option.name,
-			valueLabel:
-				option.options.find((item) => item.value === option.currentValue)?.name ||
-				option.currentValue ||
-				"",
-			currentValue: option.currentValue,
-			options: option.options.map((item) => ({ value: item.value, label: item.name })),
-			onSelect: (value) => void changeConfigOption(option.id, value),
-		});
-	}
+	const modelRows: ModelRow[] = buildModelRows(capabilities).map((row) => ({
+		id: row.id,
+		label: row.label,
+		valueLabel: row.valueLabel,
+		currentValue: row.currentValue,
+		options: row.options,
+		onSelect: (value) =>
+			void changeConfigOption(row.id, row.toggle ? (row.toggleNext ?? value) : value),
+	}));
 	const currentContext = modelOption?.currentValue
 		? modelContexts[modelOption.currentValue]
 		: undefined;
@@ -1507,13 +953,10 @@ export function App() {
 				activeTitle={activeTitle}
 				connected={connected}
 				status={status}
-				searchOpen={searchOpen}
-				onToggleSearch={() => {
-					setSearchOpen((value) => !value);
-					if (searchOpen) setSearchText("");
-				}}
-				showPreview={showPreview}
-				onTogglePreview={() => setShowPreview((value) => !value)}
+				searchOpen={search.open}
+				onToggleSearch={() => (search.open ? search.closeSearch() : search.openSearch())}
+				showPreview={docsState.showPreview}
+				onTogglePreview={() => docsState.setShowPreview((value) => !value)}
 				filterRef={filterRef}
 			/>
 
@@ -1537,36 +980,36 @@ export function App() {
 				<main className="omp-main">
 					<div className="omp-content">
 						<section className="omp-chat">
-							{searchOpen && (
+							{search.open && (
 								<div className="omp-searchbar" role="search">
 									<Icon name="search" size={15} />
 									<input
-										ref={searchInputRef}
+										ref={search.inputRef}
 										autoFocus
-										value={searchText}
+										value={search.text}
 										onChange={(event) => {
-											setSearchText(event.target.value);
-											setSearchIndex(0);
+											search.setText(event.target.value);
+											search.setIndex(0);
 										}}
 										onKeyDown={(event) => {
 											if (event.key === "Enter") {
 												event.preventDefault();
-												jumpSearch(event.shiftKey ? -1 : 1);
+												search.jump(event.shiftKey ? -1 : 1);
 											}
 										}}
 										placeholder="搜索对话内容"
 										aria-label="搜索对话内容"
 									/>
-									{searchText && (
+									{search.text && (
 										<span className="omp-search-count">
-											{searchHitCount ? searchIndex + 1 : 0}/{searchHitCount}
+											{search.hitCount ? search.index + 1 : 0}/{search.hitCount}
 										</span>
 									)}
 									<button
 										type="button"
 										className="omp-search-nav"
-										onClick={() => jumpSearch(-1)}
-										disabled={!searchHitCount}
+										onClick={() => search.jump(-1)}
+										disabled={!search.hitCount}
 										title="上一处"
 										aria-label="上一处搜索结果"
 									>
@@ -1575,8 +1018,8 @@ export function App() {
 									<button
 										type="button"
 										className="omp-search-nav"
-										onClick={() => jumpSearch(1)}
-										disabled={!searchHitCount}
+										onClick={() => search.jump(1)}
+										disabled={!search.hitCount}
 										title="下一处"
 										aria-label="下一处搜索结果"
 									>
@@ -1585,10 +1028,7 @@ export function App() {
 									<button
 										type="button"
 										className="omp-search-close"
-										onClick={() => {
-											setSearchOpen(false);
-											setSearchText("");
-										}}
+										onClick={search.closeSearch}
 										title="关闭搜索"
 										aria-label="关闭搜索"
 									>
@@ -1597,51 +1037,33 @@ export function App() {
 								</div>
 							)}
 							<MessageList
-								messages={visibleMessages}
+								messages={messages}
 								running={running}
-								query={searchText.trim()}
-								atBottom={atBottom}
+								query={search.text.trim()}
+								atBottom={scroll.atBottom}
 								suggestionsEnabled={settings.homeSuggestions}
-								scrollRef={scrollRef}
-								onScroll={updateAtBottom}
-								onScrollToBottom={scrollToBottom}
-								onOpenDoc={openDoc}
+								scrollRef={scroll.scrollRef}
+								onScroll={scroll.updateAtBottom}
+								onScrollToBottom={scroll.scrollToBottom}
+								onOpenDoc={docsState.openDoc}
 								onRetry={retryMessage}
-								onPickHint={(hint) => {
-									if (!editor.range()) editor.focus();
-									editor.insertText(hint);
-									syncFromEditor();
-									editor.focus();
-								}}
+								onPickHint={composer.insertHint}
 							/>
 
 							<Composer
 								cwd={settings.cwd}
 								connected={connected}
 								running={running}
-								sendDisabled={!connected || !input.trim()}
-								editorRef={editorRef}
-								editorHandlers={{
-									onInput: onEditorInput,
-									onBeforeInput: onEditorBeforeInput,
-									onKeyDown: onEditorKeyDown,
-									onMouseDown: onEditorMouseDown,
-									onCompositionStart: () => {
-										composingRef.current = true;
-									},
-									onCompositionEnd: () => {
-										composingRef.current = false;
-										onEditorInput();
-									},
-									onBlur: () => setSkillSuggestOpen(false),
-								}}
+								sendDisabled={!connected || !composer.input.trim()}
+								editorRef={composer.editorRef}
+								editorHandlers={composer.handlers}
 								resourceSuggest={{
-									open: resourceSuggestOpen,
+									open: composer.resourceSuggest.open,
 									menu: {
 										label: "引用资源",
-										count: resourceCandidates.length,
+										count: composer.resourceSuggest.candidates.length,
 										empty: "暂无可引用的文件/网址，可直接粘贴网址或选择本地文件",
-										entries: resourceCandidates.map((candidate) => ({
+										entries: composer.resourceSuggest.candidates.map((candidate) => ({
 											key: `${candidate.group}:${candidate.value}`,
 											icon:
 												candidate.group === "网址" ? (
@@ -1652,34 +1074,36 @@ export function App() {
 											title: candidate.label,
 											detail: `${candidate.group} · ${candidate.detail}`,
 										})),
-										activeIndex: resourceActive,
-										onHover: setResourceActive,
-										onSelect: (index) => applyResource(resourceCandidates[index]),
+										activeIndex: composer.resourceSuggest.active,
+										onHover: composer.resourceSuggest.setActive,
+										onSelect: (index) =>
+											composer.applyResource(composer.resourceSuggest.candidates[index]),
 										footer: {
 											icon: "folder",
 											label: "从本地选择文件…",
 											onSelect: () => {
-												setResourceSuggestOpen(false);
+												composer.resourceSuggest.close();
 												void insertFileReference();
 											},
 										},
 									},
 								}}
 								skillSuggest={{
-									open: skillSuggestOpen,
+									open: composer.skillSuggest.open,
 									menu: {
 										label: "技能",
-										count: skillSuggestions.length,
+										count: composer.skillSuggest.items.length,
 										empty: "没有匹配的已安装技能",
-										entries: skillSuggestions.map((skill) => ({
+										entries: composer.skillSuggest.items.map((skill) => ({
 											key: skill.name,
 											icon: skill.name.slice(0, 1).toUpperCase(),
 											title: skill.name,
 											detail: skill.description,
 										})),
-										activeIndex: skillActive,
-										onHover: setSkillActive,
-										onSelect: (index) => applySkill(skillSuggestions[index].name),
+										activeIndex: composer.skillSuggest.active,
+										onHover: composer.skillSuggest.setActive,
+										onSelect: (index) =>
+											composer.applySkill(composer.skillSuggest.items[index].name),
 									},
 								}}
 								entryMenu={{
@@ -1690,20 +1114,17 @@ export function App() {
 										setEntryMenuOpen((value) => !value);
 									},
 									onChangeSubmenu: setEntrySubmenu,
-									onClose: () => {
-										setEntryMenuOpen(false);
-										setEntrySubmenu(null);
-									},
+									onClose: closeEntryMenu,
 									menuRef: entryMenuRef,
-									currentModeName: currentModeName,
+									currentModeName: capabilities.currentModeName,
 									modes: activeState?.modes ?? null,
 									onSelectMode: (modeId) => void changeMode(modeId),
-									skills: installedSkills,
-									onSelectSkill: applySkill,
+									skills: composer.installedSkills,
+									onSelectSkill: composer.applySkill,
 									onManageSkills: () => setShowSkills(true),
 									mcpConfig: mcpConfig,
 									onInsertFile: () => void insertFileReference(),
-									onOpenResourceSuggest: openResourceSuggest,
+									onOpenResourceSuggest: composer.openResourceSuggest,
 								}}
 								approval={{
 									open: approvalOpen,
@@ -1753,16 +1174,16 @@ export function App() {
 							/>
 						</section>
 
-						{showPreview && (
+						{docsState.showPreview && (
 							<PreviewPane
-								docs={docs}
-								currentDoc={currentDoc}
-								activeDoc={activeDoc}
-								onSelectDoc={setActiveDoc}
-								onCloseDoc={closeDoc}
-								onReload={() => void reloadDoc()}
-								onOpenFile={() => void openLocalFile()}
-								onClose={() => setShowPreview(false)}
+								docs={docsState.docs}
+								currentDoc={docsState.currentDoc}
+								activeDoc={docsState.activeDoc}
+								onSelectDoc={docsState.setActiveDoc}
+								onCloseDoc={docsState.closeDoc}
+								onReload={() => void docsState.reloadDoc()}
+								onOpenFile={() => void docsState.openLocalFile()}
+								onClose={() => docsState.setShowPreview(false)}
 							/>
 						)}
 					</div>
@@ -1777,9 +1198,7 @@ export function App() {
 						const pending = sensitiveHit;
 						setSensitiveHit(null);
 						// 与正常发送保持一致：确认发送后清空输入区与 chip
-						editor.clear();
-						setInput("");
-						setSkillChips([]);
+						composer.clear();
 						void send(pending.text, true);
 					}}
 				/>
@@ -1809,7 +1228,7 @@ export function App() {
 					autoInstallTrustedSkills={settings.autoInstallTrustedSkills}
 					onClose={() => setShowSkills(false)}
 					onUseSkill={(name) => {
-						applySkill(name);
+						composer.applySkill(name);
 						setShowSkills(false);
 					}}
 				/>
