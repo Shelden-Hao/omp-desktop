@@ -15,6 +15,15 @@ import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { readModelContexts } from "./model-context";
 import { listMcpServers } from "./mcp";
 import {
+	applyLoginItem,
+	applyProxy,
+	getSystemInfo,
+	openLink,
+	openPath,
+	pickDirectory,
+	syncPowerBlockers,
+} from "./system";
+import {
 	createSkill,
 	getSkillConfigValue,
 	getSkillPaths,
@@ -24,6 +33,7 @@ import {
 	setSkillEnabled,
 	showSkillInfo,
 	publishSkill,
+	runOmpCommand,
 	skillCall,
 	skillCommand,
 	uninstallSkill,
@@ -40,6 +50,15 @@ interface AppSettings {
 	theme: "light" | "dark" | "system";
 	/** 透传给 omp 的 --approval-mode，切换后需要重启 ACP 子进程才生效 */
 	approvalMode: ApprovalMode;
+	fontScale: number;
+	linkOpenMode: "ask" | "browser" | "copy";
+	keepAwakeOnLock: boolean;
+	preventSystemSleep: boolean;
+	openAtLogin: boolean;
+	proxyMode: "direct" | "system" | "manual";
+	proxyUrl: string;
+	autoInstallTrustedSkills: boolean;
+	autoUpdateSkills: boolean;
 }
 
 type ApprovalMode = "always-ask" | "always-ask-cached" | "write" | "yolo";
@@ -419,6 +438,15 @@ function defaultSettings(): AppSettings {
 		theme: "system",
 		// omp 自身默认就是 yolo（全部自动批准），保持与 CLI 一致
 		approvalMode: "yolo",
+		fontScale: 1,
+		linkOpenMode: "ask",
+		keepAwakeOnLock: false,
+		preventSystemSleep: true,
+		openAtLogin: false,
+		proxyMode: "direct",
+		proxyUrl: "",
+		autoInstallTrustedSkills: false,
+		autoUpdateSkills: true,
 	};
 }
 
@@ -434,6 +462,25 @@ function loadSettings(): AppSettings {
 			if (!saved.approvalMode || !APPROVAL_MODES.includes(saved.approvalMode)) {
 				saved.approvalMode = defaults.approvalMode;
 			}
+			if (typeof saved.fontScale !== "number" || saved.fontScale < 0.8 || saved.fontScale > 1.4) {
+				saved.fontScale = defaults.fontScale;
+			}
+			if (!["ask", "browser", "copy"].includes(saved.linkOpenMode ?? "")) {
+				saved.linkOpenMode = defaults.linkOpenMode;
+			}
+			if (!["direct", "system", "manual"].includes(saved.proxyMode ?? "")) {
+				saved.proxyMode = defaults.proxyMode;
+			}
+			for (const key of [
+				"keepAwakeOnLock",
+				"preventSystemSleep",
+				"openAtLogin",
+				"autoInstallTrustedSkills",
+				"autoUpdateSkills",
+			] as const) {
+				if (typeof saved[key] !== "boolean") saved[key] = defaults[key];
+			}
+			if (typeof saved.proxyUrl !== "string") saved.proxyUrl = defaults.proxyUrl;
 			return { ...defaults, ...saved };
 		}
 	} catch {
@@ -445,6 +492,35 @@ function loadSettings(): AppSettings {
 function saveSettings(next: AppSettings) {
 	mkdirSync(dirname(SETTINGS_PATH), { recursive: true });
 	writeFileSync(SETTINGS_PATH, JSON.stringify(next, null, 2), "utf8");
+}
+
+async function applyRuntimeSettings() {
+	applyLoginItem(settings.openAtLogin);
+	syncPowerBlockers(settings, agent !== null);
+	await applyProxy(settings);
+}
+
+/**
+ * 更新 skills.json 中登记过的注册表技能（skills.omp.sh）。
+ * 只调用 `omp skill update -g`：本地手写/agents 目录里的技能没有注册表版本，
+ * 逐个传名字会全部报 "Invalid skill name / not listed"。
+ */
+async function updateAllInstalledSkills() {
+	const summary = { updated: 0, failed: 0, errors: [] as string[] };
+	const result = await skillCommand(() =>
+		runOmpCommand(settings, ["skill", "update", "-g", "--yes"]),
+	);
+	if (!result.ok) {
+		summary.failed = 1;
+		summary.errors.push(result.error ?? "更新技能失败");
+		return summary;
+	}
+	// 每更新一个技能输出一行：+ @scope/name@1.2.3 或 @scope/name 1.0 → 1.2.3
+	summary.updated = result.stdout
+		.split(/\r?\n/)
+		.map((line) => line.trim())
+		.filter((line) => line.startsWith("+ ") || line.includes("→")).length;
+	return summary;
 }
 
 interface StoredSession {
@@ -519,6 +595,7 @@ function startAgent(): { ok: boolean; error?: string } {
 	} catch (e) {
 		return { ok: false, error: `启动 omp 失败：${(e as Error).message}` };
 	}
+	syncPowerBlockers(settings, true);
 
 	agent.stdout?.setEncoding("utf8");
 	agent.stdout?.on("data", (chunk: string) => {
@@ -539,6 +616,7 @@ function startAgent(): { ok: boolean; error?: string } {
 	agent.on("exit", (code) => {
 		sendToRenderer("acp:exit", String(code ?? 0));
 		agent = null;
+		syncPowerBlockers(settings, false);
 	});
 
 	agent.on("error", (e) => {
@@ -555,6 +633,7 @@ function stopAgent() {
 		agent.kill();
 		agent = null;
 	}
+	syncPowerBlockers(settings, false);
 }
 
 // ---------------------------------------------------------------------------
@@ -595,17 +674,26 @@ app.whenReady().then(() => {
 	ipcMain.handle("window:close", () => BrowserWindow.getFocusedWindow()?.close());
 
 	ipcMain.handle("settings:get", () => settings);
-	ipcMain.handle("settings:set", (_e, next: Partial<AppSettings>) => {
+	ipcMain.handle("settings:set", async (_e, next: Partial<AppSettings>) => {
 		const requestedTheme = next.theme;
 		const theme =
 			requestedTheme === "light" || requestedTheme === "dark" || requestedTheme === "system"
 				? requestedTheme
 				: settings.theme;
-		settings = { ...settings, ...next, theme };
+		const fontScale =
+			typeof next.fontScale === "number" && next.fontScale >= 0.8 && next.fontScale <= 1.4
+				? next.fontScale
+				: settings.fontScale;
+		settings = { ...settings, ...next, theme, fontScale };
 		nativeTheme.themeSource = theme === "system" ? "system" : theme;
 		saveSettings(settings);
+		await applyRuntimeSettings();
 		return settings;
 	});
+	ipcMain.handle("system:info", () => getSystemInfo());
+	ipcMain.handle("system:open-path", (_e, path: string) => openPath(path));
+	ipcMain.handle("system:pick-directory", () => pickDirectory());
+	ipcMain.handle("links:open", (_e, url: string) => openLink(url, settings.linkOpenMode));
 	ipcMain.handle("sessions:get", () => loadSessions());
 	ipcMain.handle("sessions:set", (_e, next: StoredSession[]) => {
 		saveSessions(next);
@@ -697,6 +785,7 @@ app.whenReady().then(() => {
 		skillCall(() => getSkillConfigValue(settings, key)),
 	);
 	ipcMain.handle("skills:paths", () => skillCall(() => getSkillPaths(settings)));
+	ipcMain.handle("skills:update-all", () => updateAllInstalledSkills());
 	ipcMain.handle(
 		"skills:create",
 		(_e, input: { name: string; description: string; scope: "user" | "project" }) =>
@@ -730,6 +819,16 @@ app.whenReady().then(() => {
 		agent.stdin.write(line + "\n");
 		return { ok: true };
 	});
+
+	void applyRuntimeSettings();
+	if (settings.autoUpdateSkills) {
+		// 启动后稍等再做，避免和窗口/会话初始化争抢 IO
+		setTimeout(() => {
+			void updateAllInstalledSkills().catch((error) =>
+				console.error("auto skill update failed", error),
+			);
+		}, 1500);
+	}
 
 	createWindow();
 	app.on("activate", () => {

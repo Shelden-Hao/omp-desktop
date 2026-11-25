@@ -11,6 +11,7 @@ type Sort = "relevance" | "downloads" | "recent";
 
 interface SkillPanelProps {
 	cwd: string;
+	autoInstallTrustedSkills: boolean;
 	onClose(): void;
 	onUseSkill(name: string): void;
 }
@@ -22,6 +23,7 @@ interface MarketHit {
 	description: string;
 	weeklyDownloads?: number;
 	updatedAt?: number | string;
+	keywords: string[];
 }
 
 const SORT_LABEL: Record<Sort, string> = {
@@ -50,6 +52,16 @@ function shortNumber(value?: number): string {
 	return String(value);
 }
 
+function isTrustedHit(hit: MarketHit): boolean {
+	// omp 市场没有独立的“已安全扫描”字段：只认官方 scope 或官方标记的关键词，
+	// 其余技能一律保留人工确认，避免把普通第三方包当成可信包静默安装。
+	const trustedMarkers = new Set(["omp", "official", "verified", "trusted"]);
+	return (
+		trustedMarkers.has(hit.scope.toLowerCase()) ||
+		hit.keywords.some((keyword) => trustedMarkers.has(keyword.toLowerCase()))
+	);
+}
+
 function toHits(data: SkillSearchData | undefined): MarketHit[] {
 	return (data?.hits ?? []).map((hit) => {
 		const scope = hit.scope ?? "";
@@ -61,6 +73,9 @@ function toHits(data: SkillSearchData | undefined): MarketHit[] {
 			description: typeof hit.description === "string" ? hit.description : "",
 			weeklyDownloads: hit.weeklyDownloads,
 			updatedAt: hit.updatedAt,
+			keywords: Array.isArray(hit.keywords)
+				? hit.keywords.filter((keyword): keyword is string => typeof keyword === "string")
+				: [],
 		};
 	});
 }
@@ -72,7 +87,12 @@ function detailText(value: unknown): string {
 	return "";
 }
 
-export function SkillsPanel({ cwd, onClose, onUseSkill }: SkillPanelProps) {
+export function SkillsPanel({
+	cwd,
+	autoInstallTrustedSkills,
+	onClose,
+	onUseSkill,
+}: SkillPanelProps) {
 	const [tab, setTab] = useState<Tab>("installed");
 	const [skills, setSkills] = useState<SkillSummary[]>([]);
 	const [warnings, setWarnings] = useState<string[]>([]);
@@ -221,6 +241,11 @@ export function SkillsPanel({ cwd, onClose, onUseSkill }: SkillPanelProps) {
 	};
 
 	const install = async (hit: MarketHit) => {
+		const trusted = isTrustedHit(hit);
+		if (!(autoInstallTrustedSkills && trusted)) {
+			const hint = trusted ? "该技能被标记为可信。" : "该技能未标记为可信。";
+			if (!window.confirm(`安装技能 ${hit.fullName}？${hint}`)) return;
+		}
 		setBusyName(hit.fullName);
 		const reply = await window.desktop.skills.install(hit.fullName, installScope);
 		setBusyName("");

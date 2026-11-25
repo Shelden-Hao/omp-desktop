@@ -9,8 +9,10 @@ import type {
 	SkillScope,
 	SkillPathsData,
 	SkillSearchData,
+	SkillUpdateSummary,
 	SkillsReply,
 	StoredSession,
+	SystemInfoData,
 	ToolResult,
 } from "../renderer/acp-client";
 
@@ -66,6 +68,15 @@ export interface DesktopBridge {
 			description: string;
 			scope: SkillScope;
 		}): Promise<SkillsReply<{ path: string }>>;
+		updateAll(): Promise<SkillUpdateSummary>;
+	};
+	system: {
+		info(): Promise<SystemInfoData>;
+		openPath(path: string): Promise<{ ok: boolean; error?: string }>;
+		pickDirectory(): Promise<string | null>;
+	};
+	links: {
+		open(url: string): Promise<void>;
 	};
 	window: {
 		minimize(): Promise<void>;
@@ -122,6 +133,15 @@ const bridge: DesktopBridge = {
 		enabled: (name, enabled) => ipcRenderer.invoke("skills:enabled", name, enabled),
 		paths: () => ipcRenderer.invoke("skills:paths"),
 		create: (input) => ipcRenderer.invoke("skills:create", input),
+		updateAll: () => ipcRenderer.invoke("skills:update-all"),
+	},
+	system: {
+		info: () => ipcRenderer.invoke("system:info"),
+		openPath: (path) => ipcRenderer.invoke("system:open-path", path),
+		pickDirectory: () => ipcRenderer.invoke("system:pick-directory"),
+	},
+	links: {
+		open: (url) => ipcRenderer.invoke("links:open", url),
 	},
 	window: {
 		minimize: () => ipcRenderer.invoke("window:minimize"),

@@ -15,12 +15,39 @@ export type ThemeMode = "light" | "dark" | "system";
  */
 export type ApprovalMode = "always-ask" | "always-ask-cached" | "write" | "yolo";
 
+export type LinkOpenMode = "ask" | "browser" | "copy";
+export type ProxyMode = "direct" | "system" | "manual";
+
 export interface DesktopSettings {
   ompCliPath: string;
   bunPath: string;
   cwd: string;
   theme: ThemeMode;
   approvalMode: ApprovalMode;
+  /** 字体缩放，1 为默认；通过 --font-scale 影响所有字号变量 */
+  fontScale: number;
+  linkOpenMode: LinkOpenMode;
+  keepAwakeOnLock: boolean;
+  preventSystemSleep: boolean;
+  openAtLogin: boolean;
+  proxyMode: ProxyMode;
+  proxyUrl: string;
+  autoInstallTrustedSkills: boolean;
+  autoUpdateSkills: boolean;
+}
+
+export interface SystemInfoData {
+  cacheDir: string;
+  usedBytes: number;
+  totalBytes: number;
+  availableBytes: number;
+  openAtLogin: boolean;
+}
+
+export interface SkillUpdateSummary {
+  updated: number;
+  failed: number;
+  errors: string[];
 }
 
 export type SkillScope = "user" | "project";
@@ -55,7 +82,7 @@ export interface SkillSearchData {
     description?: string;
     weeklyDownloads?: number;
     updatedAt?: number | string;
-    tags?: string[];
+    keywords?: string[];
     [key: string]: unknown;
   }>;
 }
@@ -154,6 +181,15 @@ export interface AcpBridge {
       description: string;
       scope: SkillScope;
     }): Promise<SkillsReply<{ path: string }>>;
+    updateAll(): Promise<SkillUpdateSummary>;
+  };
+  system: {
+    info(): Promise<SystemInfoData>;
+    openPath(path: string): Promise<{ ok: boolean; error?: string }>;
+    pickDirectory(): Promise<string | null>;
+  };
+  links: {
+    open(url: string): Promise<void>;
   };
   window: {
     minimize(): Promise<void>;

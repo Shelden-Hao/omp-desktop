@@ -14,12 +14,12 @@ import {
 	type ContextReport,
 	type DesktopSettings,
 	type McpConfigInfo,
-	type ThemeMode,
 	type SessionState,
 	type SkillSummary,
 	normalizeSessionState,
 } from "./acp-client";
 import { DEFAULT_DOCS, type DocFile } from "./docs";
+import { SettingsPanel } from "./SettingsPanel";
 import { SkillsPanel } from "./SkillsPanel";
 
 interface Session {
@@ -92,12 +92,6 @@ type IconName =
 	| "shield";
 
 const uid = () => Math.random().toString(36).slice(2, 10);
-
-const THEME_LABEL: Record<ThemeMode, string> = {
-	light: "浅色",
-	dark: "深色",
-	system: "跟随系统",
-};
 
 function shortPath(path: string) {
 	const parts = path.replace(/\\/g, "/").split("/").filter(Boolean);
@@ -665,7 +659,9 @@ function parseMarkdown(source: string): MdBlock[] {
 }
 
 function InlineText({ text, query = "" }: { text: string; query?: string }) {
-	const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g).filter(Boolean);
+	const parts = text
+		.split(/(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\(https?:\/\/[^\s)]+\)|https?:\/\/[^\s<]+)/g)
+		.filter(Boolean);
 	return (
 		<>
 			{parts.map((part, index) => {
@@ -681,6 +677,22 @@ function InlineText({ text, query = "" }: { text: string; query?: string }) {
 						<strong key={index}>
 							<Highlight text={part.slice(2, -2)} query={query} />
 						</strong>
+					);
+				}
+				const markdownLink = part.match(/^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/);
+				if (markdownLink) {
+					return (
+						<a key={index} href={markdownLink[2]} title={markdownLink[2]}>
+							<Highlight text={markdownLink[1]} query={query} />
+						</a>
+					);
+				}
+				if (/^https?:\/\//.test(part)) {
+					const url = part.replace(/[.,;:!?]+$/, "");
+					return (
+						<a key={index} href={url} title={url}>
+							<Highlight text={url} query={query} />
+						</a>
 					);
 				}
 				return (
@@ -738,6 +750,13 @@ function CodeBlock({
 	);
 }
 
+function onMarkdownLinkClick(event: ReactMouseEvent<HTMLDivElement>) {
+	const anchor = (event.target as HTMLElement).closest("a");
+	if (!anchor) return;
+	event.preventDefault();
+	void window.desktop.links.open(anchor.getAttribute("href") || "").catch(() => undefined);
+}
+
 function Markdown({
 	text,
 	onOpen,
@@ -749,7 +768,7 @@ function Markdown({
 }) {
 	const blocks = useMemo(() => parseMarkdown(text), [text]);
 	return (
-		<div className="omp-markdown">
+		<div className="omp-markdown" onClick={onMarkdownLinkClick}>
 			{blocks.map((block, index) => {
 				if (block.type === "heading") {
 					const Tag = `h${Math.min(block.level + 1, 6)}` as "h2" | "h3" | "h4" | "h5" | "h6";
@@ -1088,6 +1107,15 @@ export function App() {
 		cwd: "",
 		theme: "system",
 		approvalMode: "yolo",
+		fontScale: 1,
+		linkOpenMode: "ask",
+		keepAwakeOnLock: false,
+		preventSystemSleep: true,
+		openAtLogin: false,
+		proxyMode: "direct",
+		proxyUrl: "",
+		autoInstallTrustedSkills: false,
+		autoUpdateSkills: true,
 	});
 	const [permission, setPermission] = useState<PermissionState | null>(null);
 	const [docs, setDocs] = useState<DocFile[]>(DEFAULT_DOCS);
@@ -1450,6 +1478,10 @@ export function App() {
 		media.addEventListener("change", apply);
 		return () => media.removeEventListener("change", apply);
 	}, [settings.theme]);
+
+	useEffect(() => {
+		document.documentElement.style.setProperty("--font-scale", String(settings.fontScale || 1));
+	}, [settings.fontScale]);
 
 	// ---------- 非受控 contenteditable 输入区 ----------
 	// chip 直接嵌在文本流里，文字会围绕它换行；React 只在 chip 增删/发送后同步 state，不回写 innerHTML
@@ -2349,13 +2381,15 @@ export function App() {
 		}
 	};
 
-	const saveSettings = async () => {
+	const saveSettings = async (next: DesktopSettings) => {
 		try {
-			await window.desktop.settings.set(settings);
+			const saved = await window.desktop.settings.set(next);
+			setSettings(saved);
 			setShowSettings(false);
 			setStatus("设置已保存");
 		} catch (error) {
 			setStatus(`设置保存失败：${(error as Error).message}`);
+			throw error;
 		}
 	};
 
@@ -3703,64 +3737,17 @@ export function App() {
 			)}
 
 			{showSettings && (
-				<div className="omp-modal-layer" role="dialog" aria-modal="true" aria-label="设置">
-					<div className="omp-modal settings">
-						<div className="omp-modal-icon">
-							<Icon name="settings" size={18} />
-						</div>
-						<h3>设置</h3>
-						<p>修改后会在下次启动会话时生效，主题会立即应用。</p>
-						<label>
-							<span>omp CLI 路径</span>
-							<input
-								value={settings.ompCliPath}
-								onChange={(event) => setSettings({ ...settings, ompCliPath: event.target.value })}
-							/>
-						</label>
-						<label>
-							<span>bun 路径</span>
-							<input
-								value={settings.bunPath}
-								onChange={(event) => setSettings({ ...settings, bunPath: event.target.value })}
-							/>
-						</label>
-						<label>
-							<span>工作目录</span>
-							<input
-								value={settings.cwd}
-								onChange={(event) => setSettings({ ...settings, cwd: event.target.value })}
-							/>
-						</label>
-						<div className="omp-settings-theme">
-							<span>主题</span>
-							<div className="omp-theme-switch" role="group" aria-label="主题模式">
-								{(["light", "dark", "system"] as ThemeMode[]).map((mode) => (
-									<button
-										key={mode}
-										type="button"
-										className={settings.theme === mode ? "active" : ""}
-										onClick={() => setSettings({ ...settings, theme: mode })}
-									>
-										{THEME_LABEL[mode]}
-									</button>
-								))}
-							</div>
-						</div>
-						<div className="omp-modal-actions">
-							<button type="button" className="secondary" onClick={() => setShowSettings(false)}>
-								取消
-							</button>
-							<button type="button" className="primary" onClick={saveSettings}>
-								保存
-							</button>
-						</div>
-					</div>
-				</div>
+				<SettingsPanel
+					settings={settings}
+					onClose={() => setShowSettings(false)}
+					onSave={saveSettings}
+				/>
 			)}
 
 			{showSkills && (
 				<SkillsPanel
 					cwd={settings.cwd}
+					autoInstallTrustedSkills={settings.autoInstallTrustedSkills}
 					onClose={() => setShowSkills(false)}
 					onUseSkill={(name) => {
 						applySkill(name);

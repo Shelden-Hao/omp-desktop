@@ -19,11 +19,12 @@
   --radius-md: 10px;
   --radius-lg: 14px;
   --radius-xl: 18px;
-  --font-xs: 10px;
-  --font-sm: 11px;
-  --font-md: 12px;
-  --font-lg: 14px;
-  --font-xl: 18px;
+  --font-scale: 1;
+  --font-xs: calc(10px * var(--font-scale));
+  --font-sm: calc(11px * var(--font-scale));
+  --font-md: calc(12px * var(--font-scale));
+  --font-lg: calc(14px * var(--font-scale));
+  --font-xl: calc(18px * var(--font-scale));
 
   --surface-app: #f5f6f8;
   --surface-panel: #ffffff;
@@ -3131,6 +3132,365 @@ details[open] > summary .omp-fold-chevron {
   padding: var(--space-2);
   color: var(--text-muted);
   font-size: var(--font-sm);
+}
+
+/* ---------- 设置页 ---------- */
+.omp-settings-shell {
+  width: min(940px, 100%);
+  max-height: min(760px, calc(100vh - 48px));
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-lg);
+}
+.omp-settings-nav {
+  flex: none;
+  width: 180px;
+  padding: var(--space-5) var(--space-2);
+  border-right: 1px solid var(--border-subtle);
+  background: var(--surface-subtle);
+}
+.omp-settings-nav-title {
+  margin: 0 var(--space-2) var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 600;
+}
+.omp-settings-nav button {
+  display: block;
+  width: 100%;
+  height: 32px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-md);
+  text-align: left;
+  cursor: pointer;
+}
+.omp-settings-nav button:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+.omp-settings-main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+}
+.omp-settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.omp-settings-head strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 15px;
+}
+.omp-settings-head span {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+.omp-settings-close {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.omp-settings-close:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+.omp-settings-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-5);
+}
+.omp-settings-section {
+  margin-bottom: var(--space-5);
+}
+.omp-settings-section h4 {
+  margin: 0 0 var(--space-2) 2px;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 600;
+}
+.omp-settings-card {
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+}
+.omp-set-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-height: 62px;
+  padding: var(--space-3) var(--space-4);
+}
+.omp-set-row + .omp-set-row,
+.omp-set-row + .omp-set-storage,
+.omp-set-storage + .omp-set-storage,
+.omp-set-inline-action,
+.omp-set-disk {
+  border-top: 1px solid var(--border-subtle);
+}
+.omp-set-row-stack {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.omp-set-row-text {
+  min-width: 0;
+}
+.omp-set-row-title {
+  color: var(--text-primary);
+  font-size: var(--font-md);
+  font-weight: 600;
+}
+.omp-set-row-desc {
+  margin: 3px 0 0;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  line-height: 1.5;
+}
+.omp-set-row-control {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+}
+.omp-set-row select,
+.omp-set-row input,
+.omp-set-proxy select,
+.omp-set-proxy input,
+.omp-set-stack input {
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-input);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+}
+.omp-set-row select,
+.omp-set-proxy select {
+  min-width: 160px;
+}
+.omp-set-range {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.omp-set-range input {
+  width: 180px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--accent);
+}
+.omp-set-range span {
+  width: 40px;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  text-align: right;
+}
+.omp-set-toggle {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--border-strong);
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.omp-set-toggle span {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+  transition: transform 120ms ease;
+}
+.omp-set-toggle.active {
+  background: var(--accent);
+}
+.omp-set-toggle.active span {
+  transform: translateX(16px);
+}
+.omp-set-proxy {
+  display: flex;
+  width: 100%;
+  gap: var(--space-2);
+}
+.omp-set-proxy input {
+  flex: 1;
+  min-width: 0;
+}
+.omp-set-inline-action {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+.omp-set-inline-action button,
+.omp-set-storage button {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+.omp-set-inline-action button:hover,
+.omp-set-storage button:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+.omp-set-inline-action button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.omp-set-storage {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+}
+.omp-set-storage .omp-set-row-text {
+  flex: 1;
+}
+.omp-set-storage .omp-set-row-desc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.omp-set-path {
+  width: 100%;
+  height: 30px;
+  margin-top: var(--space-2);
+  padding: 0 9px;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.omp-set-disk {
+  padding: var(--space-3) var(--space-4);
+}
+.omp-set-disk-bar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-hover);
+}
+.omp-set-disk-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+.omp-set-disk-legend {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+.omp-set-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+.omp-set-stack label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.omp-set-stack label > span {
+  flex: none;
+  width: 96px;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+.omp-set-stack input {
+  flex: 1;
+  min-width: 0;
+}
+.omp-settings-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--border-subtle);
+}
+.omp-settings-footer button {
+  height: 32px;
+  padding: 0 15px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-md);
+  font-weight: 600;
+  cursor: pointer;
+}
+.omp-settings-footer .primary {
+  border: 0;
+  background: var(--accent);
+  color: #fff;
+}
+.omp-settings-footer .primary:hover {
+  background: var(--accent-hover);
+}
+.omp-settings-footer .secondary {
+  border: 1px solid var(--border-strong);
+  background: var(--surface-panel);
+  color: var(--text-secondary);
+}
+.omp-settings-footer .secondary:hover {
+  background: var(--surface-hover);
+}
+.omp-set-error {
+  flex: 1;
+  color: var(--danger);
+  font-size: var(--font-sm);
+}
+.omp-markdown a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
 }
 
 @media (prefers-reduced-motion: reduce) {
