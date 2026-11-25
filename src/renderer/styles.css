@@ -1422,10 +1422,9 @@ details[open] > summary .omp-fold-chevron {
     box-shadow 120ms ease;
 }
 .omp-composer:focus-within {
-  border-color: var(--accent);
-  box-shadow:
-    0 0 0 3px var(--accent-ring),
-    var(--shadow-md);
+  /* 聚焦只保持中性边框与轻阴影，不要彩色光环 */
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
 }
 /* 输入区是非受控 contenteditable：chip 作为 inline 元素进入文本流，
    文字从 chip 后面接着排，换行后回到容器左侧，而不是被 chip 挤进右侧窄列。 */
@@ -1627,19 +1626,23 @@ details[open] > summary .omp-fold-chevron {
 .omp-reference {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 7px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  background: var(--surface-subtle);
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
   color: var(--text-secondary);
   font-size: var(--font-sm);
   cursor: pointer;
 }
-.omp-reference:hover {
-  border-color: var(--accent-ring);
-  background: var(--accent-soft);
-  color: var(--accent);
+.omp-reference:hover,
+.omp-reference.active {
+  border-color: var(--border-subtle);
+  background: var(--surface-hover);
+  color: var(--text-primary);
 }
 /* 路径标签才需要截断；入口 span 必须允许菜单浮层溢出 */
 .omp-composer-hint > span:not(.omp-entry-wrap) {

@@ -3146,11 +3146,11 @@ export function App() {
 														setEntryMenuOpen((value) => !value);
 													}}
 													title="添加文件、引用资源、模式、技能与连接器"
+													aria-label="添加"
 													aria-haspopup="menu"
 													aria-expanded={entryMenuOpen}
 												>
-													<Icon name="plus" size={13} />
-													<span className="omp-btn-label">添加</span>
+													<Icon name="plus" size={15} />
 												</button>
 												{entryMenuOpen && (
 													<div className="omp-entry-menu" role="menu" aria-label="添加与引用">
