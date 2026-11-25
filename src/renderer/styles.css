@@ -1472,6 +1472,28 @@ details[open] > summary .omp-fold-chevron {
   white-space: nowrap;
   user-select: none;
 }
+/* 资源 chip 与技能 chip 同一行框，仅配色区分（文件/网址用中性色） */
+.omp-resource-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 21px;
+  margin: 0 1px;
+  padding: 0 7px 0 3px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  font-size: var(--font-md);
+  font-weight: 600;
+  line-height: 19px;
+  vertical-align: middle;
+  white-space: nowrap;
+  user-select: none;
+}
+.omp-resource-chip .omp-skill-chip-remove {
+  background: color-mix(in srgb, var(--text-muted) 18%, transparent);
+}
 .omp-skill-chip-remove {
   display: inline-grid;
   flex: none;
@@ -1563,6 +1585,24 @@ details[open] > summary .omp-fold-chevron {
   font-size: var(--font-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.omp-skill-suggest-action {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  margin-top: var(--space-1);
+  padding: var(--space-2);
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-md);
+  text-align: left;
+  cursor: pointer;
+}
+.omp-skill-suggest-action:hover {
+  color: var(--accent-hover);
 }
 .omp-composer-footer {
   display: flex;
@@ -2978,6 +3018,112 @@ details[open] > summary .omp-fold-chevron {
     flex: none;
     white-space: nowrap;
   }
+}
+
+/* 输入区聚合入口：一个按钮收起添加文件 / 引用资源 / 模式 / 技能 / 连接器 */
+.omp-entry-wrap {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+.omp-reference.active {
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+}
+.omp-entry-menu {
+  position: absolute;
+  bottom: calc(100% + var(--space-2));
+  left: 0;
+  z-index: 40;
+  width: max-content;
+  min-width: 190px;
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-lg);
+}
+.omp-entry-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 7px var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--font-md);
+  text-align: left;
+  cursor: pointer;
+}
+.omp-entry-item:hover,
+.omp-entry-item.active {
+  background: var(--surface-hover);
+}
+.omp-entry-item > span:first-of-type {
+  flex: 1;
+}
+.omp-entry-item-hint {
+  max-width: 130px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.omp-entry-submenu {
+  margin: 4px 0 2px;
+  padding: 4px;
+  border-top: 1px solid var(--border-subtle);
+}
+.omp-entry-subhead {
+  padding: 2px var(--space-2) 6px;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  font-weight: 600;
+}
+.omp-entry-subitem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 6px var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--font-md);
+  text-align: left;
+  cursor: pointer;
+}
+.omp-entry-subitem:hover,
+.omp-entry-subitem.active {
+  background: var(--surface-hover);
+}
+.omp-entry-subitem > span:first-child {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.omp-entry-subitem > span:first-child::first-letter {
+  text-transform: uppercase;
+}
+.omp-entry-subitem.static {
+  cursor: default;
+}
+.omp-entry-subitem.manage {
+  color: var(--accent-hover);
+}
+.omp-entry-server-meta {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+}
+.omp-entry-empty {
+  padding: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
 }
 
 @media (prefers-reduced-motion: reduce) {

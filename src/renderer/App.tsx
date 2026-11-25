@@ -13,6 +13,7 @@ import {
 	type ContextPart,
 	type ContextReport,
 	type DesktopSettings,
+	type McpConfigInfo,
 	type ThemeMode,
 	type SessionState,
 	type SkillSummary,
@@ -65,6 +66,7 @@ type IconName =
 	| "monitor"
 	| "folder"
 	| "file"
+	| "link"
 	| "close"
 	| "send"
 	| "stop"
@@ -187,8 +189,92 @@ const APPROVAL_OPTIONS: ApprovalMode[] = ["yolo", "write", "always-ask-cached", 
 
 /** 光标前正在输入的技能指令：/name 或 /skill:name（omp 实际识别的写法） */
 const SKILL_TOKEN_RE = /(?:^|\s)\/(?:skill:)?([\w-]*)$/;
+/** 光标前正在输入的资源引用：@关键字；Win 路径含空格，关键字阶段只匹配非空白 */
+const RESOURCE_TOKEN_RE = /(?:^|\s)@([^\s@]*)$/;
 /** contenteditable 中 inline chip 的标记属性；DOM 即内容真相源 */
 const SKILL_CHIP_ATTR = "data-skill";
+const RESOURCE_CHIP_ATTR = "data-resource";
+/** 两种 chip 共用的删除判定 */
+const CHIP_ATTRS = [SKILL_CHIP_ATTR, RESOURCE_CHIP_ATTR] as const;
+
+interface ResourceCandidate {
+	/** 发送到 omp 的真实文本：文件为 @path（含空格加引号），网址为裸 URL */
+	value: string;
+	/** chip 上显示的名字：文件名或域名 */
+	label: string;
+	/** 联想面板的来源分类 */
+	group: "对话中的文件" | "对话中的资源" | "网址";
+	detail: string;
+}
+
+/** 从工具调用参数/标题里抽取真实出现过的文件路径（不是臆造的候选） */
+function extractPathsFromMessages(messages: ChatMessage[]): string[] {
+	const paths = new Set<string>();
+	const push = (value: unknown) => {
+		if (typeof value !== "string") return;
+		// 常见字段：path/filePath/file_path；兼容整段参数里出现的绝对路径
+		const matches = value.match(/(?:[A-Za-z]:[\\/][^\s"',;}\]]+|(?:\.{0,2}\/|~\/)[\w./-]+)/g);
+		for (const item of matches ?? []) {
+			const clean = item.replace(/[)\]}>]+$/, "");
+			if (clean.length > 3) paths.add(clean);
+		}
+	};
+	for (const message of messages) {
+		for (const block of message.blocks) {
+			if (block.type !== "tool_call" && block.type !== "tool_result") continue;
+			push(block.title);
+			push(block.rawInput);
+			push(block.result);
+		}
+	}
+	return [...paths];
+}
+
+/** 从对话文本里抽取真实出现过的网址 */
+function extractUrlsFromMessages(messages: ChatMessage[]): string[] {
+	const urls = new Set<string>();
+	for (const message of messages) {
+		for (const block of message.blocks) {
+			if (block.type !== "text" && block.type !== "tool_result") continue;
+			for (const match of block.text.match(/https?:\/\/[^\s<>"')\]}]+/g) ?? []) {
+				urls.add(match.replace(/[.,;:]+$/, ""));
+			}
+		}
+	}
+	return [...urls];
+}
+
+const urlLabel = (url: string) => {
+	try {
+		return new URL(url).hostname;
+	} catch {
+		return url.length > 28 ? `${url.slice(0, 28)}…` : url;
+	}
+};
+
+/** 把联想草稿（@xxx 或 /xxx）从光标前的文本节点里删掉，避免 chip 与文本重复 */
+function dropDraftBeforeCursor(range: Range, tokenRe: RegExp) {
+	let node = range.startContainer;
+	let offset = range.startOffset;
+	// 光标可能停在 contenteditable 容器本身（如点击联想项后），此时取前一个文本节点的末尾
+	if (node.nodeType === Node.ELEMENT_NODE && offset > 0) {
+		const previous = node.childNodes[offset - 1];
+		if (previous?.nodeType === Node.TEXT_NODE) {
+			node = previous;
+			offset = previous.textContent?.length ?? 0;
+		}
+	}
+	if (node.nodeType !== Node.TEXT_NODE || offset === 0) return;
+	const match = (node.textContent ?? "").slice(0, offset).match(tokenRe);
+	if (!match) return;
+	const start = offset - match[0].length;
+	const drop = document.createRange();
+	drop.setStart(node, start);
+	drop.setEnd(node, offset);
+	drop.deleteContents();
+	range.setStart(node, start);
+	range.collapse(true);
+}
 
 /** omp `/context` 输出里的分段名称 → 中文 */
 const CONTEXT_PART_LABEL: Record<string, string> = {
@@ -351,6 +437,13 @@ function Icon({
 			return (
 				<svg {...common}>
 					<path d="M6 3h8l4 4v14H6zM14 3v5h4" />
+				</svg>
+			);
+		case "link":
+			return (
+				<svg {...common}>
+					<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" />
+					<path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />
 				</svg>
 			);
 		case "close":
@@ -1023,6 +1116,13 @@ export function App() {
 	const [skillQuery, setSkillQuery] = useState("");
 	const [skillActive, setSkillActive] = useState(0);
 	const [installedSkills, setInstalledSkills] = useState<SkillSummary[]>([]);
+	const [resourceSuggestOpen, setResourceSuggestOpen] = useState(false);
+	const [resourceQuery, setResourceQuery] = useState("");
+	const [resourceActive, setResourceActive] = useState(0);
+	const [entryMenuOpen, setEntryMenuOpen] = useState(false);
+	const [entrySubmenu, setEntrySubmenu] = useState<"mode" | "skills" | "connectors" | null>(null);
+	const [mcpConfig, setMcpConfig] = useState<McpConfigInfo | null>(null);
+	const entryMenuRef = useRef<HTMLSpanElement>(null);
 
 	const scrollRef = useRef<HTMLDivElement>(null);
 	/** 输入框是非受控 contenteditable：DOM 是内容真相源，React state 只做镜像用于按钮/联想 */
@@ -1073,6 +1173,51 @@ export function App() {
 			: installedSkills;
 		return matched.filter((skill) => !skillChips.includes(skill.name)).slice(0, 8);
 	}, [installedSkills, skillQuery, skillChips]);
+
+	// @ 联想候选全部来自真实数据：已打开文档、本会话工具调用出现过的路径、本会话出现过的网址、用户键入的网址
+	const resourceCandidates = useMemo<ResourceCandidate[]>(() => {
+		const query = resourceQuery.trim().toLowerCase();
+		const list: ResourceCandidate[] = [];
+		for (const doc of docs) {
+			if (!doc.path) continue;
+			list.push({
+				value: doc.path.includes(" ") ? `@"${doc.path}"` : `@${doc.path}`,
+				label: doc.name,
+				group: "对话中的文件",
+				detail: doc.path,
+			});
+		}
+		for (const path of extractPathsFromMessages(messages)) {
+			list.push({
+				value: path.includes(" ") ? `@"${path}"` : `@${path}`,
+				label: path.split(/[\\/]/).pop() || path,
+				group: "对话中的资源",
+				detail: path,
+			});
+		}
+		const typed = resourceQuery.trim();
+		if (/^https?:\/\/\S+\.\S+/.test(typed)) {
+			list.push({ value: typed, label: urlLabel(typed), group: "网址", detail: typed });
+		}
+		for (const url of extractUrlsFromMessages(messages)) {
+			list.push({ value: url, label: urlLabel(url), group: "网址", detail: url });
+		}
+		// 同一路径可能同时出现在文档和工具调用里，只保留首次出现的分组
+		const seen = new Set<string>();
+		const unique = list.filter((item) => {
+			if (seen.has(item.value)) return false;
+			seen.add(item.value);
+			return true;
+		});
+		return (
+			query
+				? unique.filter(
+						(item) =>
+							item.label.toLowerCase().includes(query) || item.detail.toLowerCase().includes(query),
+					)
+				: unique
+		).slice(0, 12);
+	}, [docs, messages, resourceQuery]);
 
 	const currentDoc = docs.find((doc) => doc.key === activeDoc);
 	const filtersActive = statusFilter !== "all" || timeFilter !== "all";
@@ -1147,6 +1292,36 @@ export function App() {
 			document.removeEventListener("keydown", onKeyDown);
 		};
 	}, [approvalOpen, contextOpen]);
+
+	// 聚合入口：点击外部或 Esc 关闭；打开时刷新技能与 MCP 配置
+	useEffect(() => {
+		if (!entryMenuOpen) return;
+		const onPointerDown = (event: MouseEvent) => {
+			if (!entryMenuRef.current?.contains(event.target as Node)) {
+				setEntryMenuOpen(false);
+				setEntrySubmenu(null);
+			}
+		};
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") {
+				setEntryMenuOpen(false);
+				setEntrySubmenu(null);
+			}
+		};
+		document.addEventListener("mousedown", onPointerDown);
+		document.addEventListener("keydown", onKeyDown);
+		void window.desktop.skills.list().then((reply) => {
+			if (reply.ok && reply.data) setInstalledSkills(reply.data.skills);
+		});
+		void window.desktop.mcp
+			.list()
+			.then(setMcpConfig)
+			.catch(() => setMcpConfig(null));
+		return () => {
+			document.removeEventListener("mousedown", onPointerDown);
+			document.removeEventListener("keydown", onKeyDown);
+		};
+	}, [entryMenuOpen]);
 
 	// 模型面板打开时刷新一次容量信息（用户可能刚在设置里加过自定义模型）
 	useEffect(() => {
@@ -1294,6 +1469,11 @@ export function App() {
 				out += `/skill:${skill}`;
 				return;
 			}
+			const resource = elem.getAttribute(RESOURCE_CHIP_ATTR);
+			if (resource) {
+				out += resource;
+				return;
+			}
 			if (elem.tagName === "BR") {
 				out += "\n";
 				return;
@@ -1357,20 +1537,7 @@ export function App() {
 		const range = getEditorRange();
 		if (!range) return;
 		// 光标前正在输入的 /xxx 只是联想草稿，先删掉，避免 chip 与纯文本重复
-		const node = range.startContainer;
-		if (node.nodeType === Node.TEXT_NODE && range.startOffset > 0) {
-			const offset = range.startOffset;
-			const match = (node.textContent ?? "").slice(0, offset).match(SKILL_TOKEN_RE);
-			if (match) {
-				const start = offset - match[0].length;
-				const drop = document.createRange();
-				drop.setStart(node, start);
-				drop.setEnd(node, offset);
-				drop.deleteContents();
-				range.setStart(node, start);
-				range.collapse(true);
-			}
-		}
+		dropDraftBeforeCursor(range, SKILL_TOKEN_RE);
 		const chip = document.createElement("span");
 		chip.className = "omp-skill-chip";
 		chip.setAttribute("contenteditable", "false");
@@ -1395,7 +1562,7 @@ export function App() {
 		sel?.addRange(range);
 	};
 
-	const removeSkillChip = (chip: HTMLElement) => {
+	const removeChip = (chip: HTMLElement) => {
 		const blank = chip.nextSibling;
 		if (blank?.nodeType === Node.TEXT_NODE && (blank.textContent ?? "").trim() === "") {
 			blank.parentNode?.removeChild(blank);
@@ -1404,22 +1571,60 @@ export function App() {
 		syncFromEditor();
 	};
 
+	const insertResourceChip = (candidate: ResourceCandidate) => {
+		if (!getEditorRange()) focusEditor();
+		const range = getEditorRange();
+		if (!range) return;
+		dropDraftBeforeCursor(range, RESOURCE_TOKEN_RE);
+		const chip = document.createElement("span");
+		chip.className = "omp-resource-chip";
+		chip.setAttribute("contenteditable", "false");
+		chip.setAttribute(RESOURCE_CHIP_ATTR, candidate.value);
+		chip.title = `${candidate.group}：${candidate.detail} · × 或 Backspace 删除`;
+		const remove = document.createElement("span");
+		remove.className = "omp-skill-chip-remove";
+		remove.setAttribute("contenteditable", "false");
+		remove.textContent = "×";
+		const label = document.createElement("span");
+		label.textContent = candidate.label;
+		chip.append(remove, label);
+		const tail = document.createTextNode(" ");
+		const fragment = document.createDocumentFragment();
+		fragment.append(chip, tail);
+		range.insertNode(fragment);
+		range.setStartAfter(tail);
+		range.collapse(true);
+		const sel = window.getSelection();
+		sel?.removeAllRanges();
+		sel?.addRange(range);
+		setResourceSuggestOpen(false);
+		setResourceQuery("");
+		syncFromEditor();
+		editorRef.current?.focus();
+	};
+
 	const onEditorInput = () => {
 		if (composingRef.current) return;
 		syncFromEditor();
 		const range = getEditorRange();
 		if (!range) {
 			setSkillSuggestOpen(false);
+			setResourceSuggestOpen(false);
 			return;
 		}
 		const node = range.startContainer;
 		const before =
 			node.nodeType === Node.TEXT_NODE && range.startOffset > 0
 				? (node.textContent ?? "").slice(0, range.startOffset)
-				: "";
-		const match = before.match(SKILL_TOKEN_RE);
-		setSkillSuggestOpen(Boolean(match));
-		setSkillQuery(match?.[1] ?? "");
+				: (node.textContent ?? "");
+		const skillMatch = before.match(SKILL_TOKEN_RE);
+		const resourceMatch = before.match(RESOURCE_TOKEN_RE);
+		// @ 优先：@ 里可能出现的 / 不应被当成技能指令
+		setResourceSuggestOpen(Boolean(resourceMatch));
+		setResourceQuery(resourceMatch?.[1] ?? "");
+		setResourceActive(0);
+		setSkillSuggestOpen(Boolean(skillMatch) && !resourceMatch);
+		setSkillQuery(skillMatch?.[1] ?? "");
 		setSkillActive(0);
 	};
 
@@ -1438,11 +1643,37 @@ export function App() {
 		const removeButton = target.closest(".omp-skill-chip-remove");
 		if (!removeButton) return;
 		event.preventDefault();
-		const chip = removeButton.closest(`[${SKILL_CHIP_ATTR}]`);
-		if (chip instanceof HTMLElement) removeSkillChip(chip);
+		const selector = CHIP_ATTRS.map((attr) => `[${attr}]`).join(",");
+		const chip = removeButton.closest(selector);
+		if (chip instanceof HTMLElement) removeChip(chip);
 	};
 
 	const onEditorKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+		if (resourceSuggestOpen && resourceCandidates.length > 0) {
+			if (event.key === "ArrowDown") {
+				event.preventDefault();
+				setResourceActive((current) => (current + 1) % resourceCandidates.length);
+				return;
+			}
+			if (event.key === "ArrowUp") {
+				event.preventDefault();
+				setResourceActive(
+					(current) => (current - 1 + resourceCandidates.length) % resourceCandidates.length,
+				);
+				return;
+			}
+			if (event.key === "Enter" || event.key === "Tab") {
+				event.preventDefault();
+				const chosen = resourceCandidates[resourceActive];
+				if (chosen) insertResourceChip(chosen);
+				return;
+			}
+			if (event.key === "Escape") {
+				event.preventDefault();
+				setResourceSuggestOpen(false);
+				return;
+			}
+		}
 		if (skillSuggestOpen && skillSuggestions.length > 0) {
 			if (event.key === "ArrowDown") {
 				event.preventDefault();
@@ -1485,10 +1716,10 @@ export function App() {
 				} else {
 					chip = node.childNodes[range.startOffset - 1] ?? null;
 				}
-				if (chip instanceof HTMLElement && chip.hasAttribute(SKILL_CHIP_ATTR)) {
+				if (chip instanceof HTMLElement && CHIP_ATTRS.some((attr) => chip.hasAttribute(attr))) {
 					event.preventDefault();
 					if (blank) blank.parentNode?.removeChild(blank);
-					removeSkillChip(chip);
+					removeChip(chip);
 					return;
 				}
 			}
@@ -1941,6 +2172,8 @@ export function App() {
 		setInput("");
 		setSkillChips([]);
 		setSkillSuggestOpen(false);
+		setResourceSuggestOpen(false);
+		setResourceQuery("");
 		atBottomRef.current = true;
 		setAtBottom(true);
 		updateMessages(sessionId, (prev) => [
@@ -2150,18 +2383,12 @@ export function App() {
 		try {
 			const file = await window.desktop.files.open();
 			if (!file) return;
-			const reference = file.path.includes(" ") ? `@"${file.path}"` : `@${file.path}`;
-			if (!getEditorRange()) focusEditor();
-			const range = getEditorRange();
-			const node = range?.startContainer;
-			const needsSpace =
-				node?.nodeType === Node.TEXT_NODE &&
-				range !== null &&
-				range.startOffset > 0 &&
-				!(node.textContent ?? "").slice(0, range.startOffset).endsWith(" ");
-			insertTextAtCursor(`${needsSpace ? " " : ""}${reference} `);
-			syncFromEditor();
-			editorRef.current?.focus();
+			insertResourceChip({
+				value: file.path.includes(" ") ? `@"${file.path}"` : `@${file.path}`,
+				label: file.name,
+				group: "对话中的文件",
+				detail: file.path,
+			});
 		} catch (error) {
 			setStatus(`引用文件失败：${(error as Error).message}`);
 		}
@@ -2176,9 +2403,9 @@ export function App() {
 		editorRef.current?.focus();
 	};
 
-	const insertSkillReference = () => {
+	const openResourceSuggest = () => {
 		if (!getEditorRange()) focusEditor();
-		insertTextAtCursor("/");
+		insertTextAtCursor("@");
 		onEditorInput();
 		editorRef.current?.focus();
 	};
@@ -2235,21 +2462,8 @@ export function App() {
 	const shortModelName =
 		(currentModelName || "").split("·").pop()?.trim() || currentModelName || "";
 
-	// 模型详情面板的配置行：只列 omp 真实提供的能力
+	// 模型详情面板只列模型相关能力；运行模式已移到输入区的「添加」聚合菜单
 	const modelRows: ModelRow[] = [];
-	if (activeState?.modes && activeState.modes.availableModes.length > 0) {
-		modelRows.push({
-			id: "mode",
-			label: "运行模式",
-			valueLabel: pickLabel(MODE_LABEL, activeState.modes.currentModeId),
-			currentValue: activeState.modes.currentModeId,
-			options: activeState.modes.availableModes.map((mode) => ({
-				value: mode.id,
-				label: pickLabel(MODE_LABEL, mode.id, mode.name),
-			})),
-			onSelect: (value) => void changeMode(value),
-		});
-	}
 	if (thoughtOption?.options && thoughtOption.options.length > 0) {
 		modelRows.push({
 			id: thoughtOption.id,
@@ -2809,6 +3023,61 @@ export function App() {
 
 							<div className="omp-composer-wrap">
 								<div className="omp-composer">
+									{resourceSuggestOpen && (
+										<div
+											className="omp-skill-suggest"
+											role="listbox"
+											aria-label="资源联想"
+											onMouseDown={(event) => event.preventDefault()}
+										>
+											<div className="omp-skill-suggest-head">
+												引用资源 ({resourceCandidates.length})
+											</div>
+											{resourceCandidates.length === 0 ? (
+												<div className="omp-skill-suggest-empty">
+													暂无可引用的文件/网址，可直接粘贴网址或选择本地文件
+												</div>
+											) : (
+												resourceCandidates.map((candidate, index) => (
+													<button
+														key={`${candidate.group}:${candidate.value}`}
+														type="button"
+														role="option"
+														aria-selected={index === resourceActive}
+														className={`omp-skill-suggest-item ${
+															index === resourceActive ? "active" : ""
+														}`}
+														onMouseEnter={() => setResourceActive(index)}
+														onClick={() => insertResourceChip(candidate)}
+													>
+														<span className="omp-skill-suggest-icon">
+															{candidate.group === "网址" ? (
+																<Icon name="link" size={13} />
+															) : (
+																<Icon name="file" size={13} />
+															)}
+														</span>
+														<span className="omp-skill-suggest-main">
+															<strong>{candidate.label}</strong>
+															<span>
+																{candidate.group} · {candidate.detail}
+															</span>
+														</span>
+													</button>
+												))
+											)}
+											<button
+												type="button"
+												className="omp-skill-suggest-action"
+												onClick={() => {
+													setResourceSuggestOpen(false);
+													void insertFileReference();
+												}}
+											>
+												<Icon name="folder" size={13} /> 从本地选择文件…
+											</button>
+										</div>
+									)}
 									{skillSuggestOpen && (
 										<div
 											className="omp-skill-suggest"
@@ -2868,29 +3137,186 @@ export function App() {
 									/>
 									<div className="omp-composer-footer">
 										<div className="omp-composer-hint">
-											<button
-												type="button"
-												className="omp-reference"
-												onClick={insertFileReference}
-												title="选择文件并插入引用"
-											>
-												<Icon name="folder" size={13} />
-												<span className="omp-btn-label">引用文件</span>
-											</button>
-											<button
-												type="button"
-												className="omp-reference"
-												onClick={insertSkillReference}
-												title="输入 / 选择技能指令"
-											>
-												<Icon name="spark" size={13} />
-												<span className="omp-btn-label">技能</span>
-											</button>
-											{currentModeName && (
-												<span className="omp-hint-tag omp-mode-label" title="推理档位">
-													{currentModeName}
-												</span>
-											)}
+											<span className="omp-entry-wrap" ref={entryMenuRef}>
+												<button
+													type="button"
+													className={`omp-reference ${entryMenuOpen ? "active" : ""}`}
+													onClick={() => {
+														setEntrySubmenu(null);
+														setEntryMenuOpen((value) => !value);
+													}}
+													title="添加文件、引用资源、模式、技能与连接器"
+													aria-haspopup="menu"
+													aria-expanded={entryMenuOpen}
+												>
+													<Icon name="plus" size={13} />
+													<span className="omp-btn-label">添加</span>
+												</button>
+												{entryMenuOpen && (
+													<div className="omp-entry-menu" role="menu" aria-label="添加与引用">
+														<button
+															type="button"
+															role="menuitem"
+															className="omp-entry-item"
+															onClick={() => {
+																setEntryMenuOpen(false);
+																void insertFileReference();
+															}}
+														>
+															<Icon name="folder" size={14} />
+															<span>添加文件</span>
+															<span className="omp-entry-item-hint">从本地选择</span>
+														</button>
+														<button
+															type="button"
+															role="menuitem"
+															className="omp-entry-item"
+															onClick={() => {
+																setEntryMenuOpen(false);
+																openResourceSuggest();
+															}}
+														>
+															<Icon name="file" size={14} />
+															<span>引用资源</span>
+															<span className="omp-entry-item-hint">文件 / 网址</span>
+														</button>
+														<button
+															type="button"
+															role="menuitem"
+															className={`omp-entry-item ${entrySubmenu === "mode" ? "active" : ""}`}
+															onClick={() =>
+																setEntrySubmenu((value) => (value === "mode" ? null : "mode"))
+															}
+														>
+															<Icon name="rotate" size={14} />
+															<span>模式</span>
+															<span className="omp-entry-item-hint">{currentModeName}</span>
+															<Icon name="chevron-right" size={12} />
+														</button>
+														<button
+															type="button"
+															role="menuitem"
+															className={`omp-entry-item ${entrySubmenu === "skills" ? "active" : ""}`}
+															onClick={() =>
+																setEntrySubmenu((value) => (value === "skills" ? null : "skills"))
+															}
+														>
+															<Icon name="spark" size={14} />
+															<span>技能</span>
+															<span className="omp-entry-item-hint">{installedSkills.length}</span>
+															<Icon name="chevron-right" size={12} />
+														</button>
+														<button
+															type="button"
+															role="menuitem"
+															className={`omp-entry-item ${entrySubmenu === "connectors" ? "active" : ""}`}
+															onClick={() =>
+																setEntrySubmenu((value) =>
+																	value === "connectors" ? null : "connectors",
+																)
+															}
+														>
+															<Icon name="layers" size={14} />
+															<span>连接器</span>
+															<span className="omp-entry-item-hint">
+																{mcpConfig?.servers.length ?? 0}
+															</span>
+															<Icon name="chevron-right" size={12} />
+														</button>
+														{entrySubmenu && (
+															<div className="omp-entry-submenu">
+																{entrySubmenu === "mode" && (
+																	<>
+																		<div className="omp-entry-subhead">运行模式</div>
+																		{(activeState?.modes?.availableModes || []).map((mode) => (
+																			<button
+																				key={mode.id}
+																				type="button"
+																				className={`omp-entry-subitem ${
+																					mode.id === activeState?.modes?.currentModeId
+																						? "active"
+																						: ""
+																				}`}
+																				onClick={() => {
+																					void changeMode(mode.id);
+																					setEntryMenuOpen(false);
+																					setEntrySubmenu(null);
+																				}}
+																			>
+																				<span>{pickLabel(MODE_LABEL, mode.id, mode.name)}</span>
+																				{mode.id === activeState?.modes?.currentModeId && (
+																					<Icon name="check" size={13} />
+																				)}
+																			</button>
+																		))}
+																		{!activeState?.modes?.availableModes.length && (
+																			<div className="omp-entry-empty">当前会话未提供模式切换</div>
+																		)}
+																	</>
+																)}
+																{entrySubmenu === "skills" && (
+																	<>
+																		<div className="omp-entry-subhead">已安装技能</div>
+																		{installedSkills.slice(0, 12).map((skill) => (
+																			<button
+																				key={skill.name}
+																				type="button"
+																				className="omp-entry-subitem"
+																				onClick={() => {
+																					applySkill(skill.name);
+																					setEntryMenuOpen(false);
+																					setEntrySubmenu(null);
+																				}}
+																			>
+																				<span>{skill.name}</span>
+																			</button>
+																		))}
+																		{!installedSkills.length && (
+																			<div className="omp-entry-empty">暂无已安装技能</div>
+																		)}
+																		<button
+																			type="button"
+																			className="omp-entry-subitem manage"
+																			onClick={() => {
+																				setEntryMenuOpen(false);
+																				setEntrySubmenu(null);
+																				setShowSkills(true);
+																			}}
+																		>
+																			<Icon name="settings" size={12} />
+																			<span>管理技能…</span>
+																		</button>
+																	</>
+																)}
+																{entrySubmenu === "connectors" && (
+																	<>
+																		<div className="omp-entry-subhead">MCP 连接器</div>
+																		{(mcpConfig?.servers || []).map((server) => (
+																			<div
+																				key={`${server.scope}:${server.name}`}
+																				className="omp-entry-subitem static"
+																				title={server.source}
+																			>
+																				<span>{server.name}</span>
+																				<span className="omp-entry-server-meta">
+																					{server.scope === "user" ? "全局" : "项目"} ·{" "}
+																					{server.transport}
+																					{server.enabled ? "" : " · 已禁用"}
+																				</span>
+																			</div>
+																		))}
+																		{!mcpConfig?.servers.length && (
+																			<div className="omp-entry-empty">
+																				未配置连接器；omp 从 .omp/mcp.json 读取
+																			</div>
+																		)}
+																	</>
+																)}
+															</div>
+														)}
+													</div>
+												)}
+											</span>
 											<span className="omp-path-label" title={settings.cwd}>
 												{shortPath(settings.cwd)}
 											</span>
