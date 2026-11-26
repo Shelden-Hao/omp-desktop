@@ -9,6 +9,7 @@ import type {
 	RuntimeInfo,
 	SystemInfoData,
 } from "../../../shared/types";
+import { ConfirmDialog } from "../../components/modals/ConfirmDialog";
 import { ModelEditor } from "./ModelEditor";
 import { AdvancedPane } from "./panes/AdvancedPane";
 import { AppearancePane } from "./panes/AppearancePane";
@@ -55,6 +56,10 @@ export function SettingsPanel({ settings, onClose, onSave }: SettingsPanelProps)
 	const [activeNav, setActiveNav] = useState("general");
 	const [query, setQuery] = useState("");
 	const [editor, setEditor] = useState<ModelInputData | null>(null);
+	/** 危险操作二次确认：null 表示没有待确认项 */
+	const [pendingConfirm, setPendingConfirm] = useState<
+		{ kind: "remove-model"; model: CustomModelEntry } | { kind: "clear-audit" } | null
+	>(null);
 	const [saving, setSaving] = useState(false);
 	const bodyRef = useRef<HTMLDivElement | null>(null);
 	/** 点击导航后短暂屏蔽滚动联动，否则 scrollIntoView 触发的 scroll 会立刻把选中项改回上一节 */
@@ -209,14 +214,11 @@ export function SettingsPanel({ settings, onClose, onSave }: SettingsPanelProps)
 	};
 
 	const removeModel = (model: CustomModelEntry) => {
-		void (async () => {
-			try {
-				setModels(await window.desktop.models.remove(model.provider, model.id));
-				notify(`已删除 ${model.provider}/${model.id}`);
-			} catch (cause) {
-				setError(cleanError(cause));
-			}
-		})();
+		setPendingConfirm({ kind: "remove-model", model });
+	};
+
+	const clearAudit = () => {
+		setPendingConfirm({ kind: "clear-audit" });
 	};
 
 	const activeItem =
@@ -331,7 +333,7 @@ export function SettingsPanel({ settings, onClose, onSave }: SettingsPanelProps)
 							notify={notify}
 							runtimes={runtimes}
 							audit={audit}
-							onRefreshAudit={refreshAudit}
+							onClearAudit={clearAudit}
 						/>
 						<AdvancedPane
 							draft={draft}
@@ -354,6 +356,50 @@ export function SettingsPanel({ settings, onClose, onSave }: SettingsPanelProps)
 					</div>
 				</div>
 			</div>
+			{pendingConfirm && (
+				<ConfirmDialog
+					title={
+						pendingConfirm.kind === "remove-model"
+							? `删除模型 ${pendingConfirm.model.provider}/${pendingConfirm.model.id}`
+							: "清空审计记录"
+					}
+					message={
+						pendingConfirm.kind === "remove-model"
+							? "会从 omp 配置中彻底移除该模型，无法恢复。确认删除吗？"
+							: `将清空全部 ${audit.length} 条本地审计记录，无法恢复。确认清空吗？`
+					}
+					confirmLabel={pendingConfirm.kind === "remove-model" ? "删除" : "清空"}
+					onConfirm={() => {
+						const pending = pendingConfirm;
+						setPendingConfirm(null);
+						if (pending.kind === "remove-model") {
+							void (async () => {
+								try {
+									const state = await window.desktop.models.remove(
+										pending.model.provider,
+										pending.model.id,
+									);
+									setModels(state);
+									notify(`已删除 ${pending.model.provider}/${pending.model.id}`);
+								} catch (cause) {
+									setError(cleanError(cause));
+								}
+							})();
+						} else {
+							void (async () => {
+								try {
+									await window.desktop.audit.clear();
+									refreshAudit();
+									notify("审计记录已清空");
+								} catch (cause) {
+									setError(cleanError(cause));
+								}
+							})();
+						}
+					}}
+					onCancel={() => setPendingConfirm(null)}
+				/>
+			)}
 			{editor && (
 				<ModelEditor
 					initial={editor}

@@ -14,7 +14,8 @@ import { formatTime } from "../util";
 interface SecurityPaneProps extends PaneProps {
 	runtimes: RuntimeInfo[];
 	audit: AuditEntry[];
-	onRefreshAudit(): void;
+	/** 清空审计记录：由外层弹二次确认后执行 */
+	onClearAudit(): void;
 }
 
 export function SecurityPane({
@@ -23,7 +24,7 @@ export function SecurityPane({
 	notify,
 	runtimes,
 	audit,
-	onRefreshAudit,
+	onClearAudit,
 }: SecurityPaneProps) {
 	const setToolPolicy = (tool: PolicyTool, value: ToolPolicy | "follow") => {
 		const next = { ...draft.toolPolicies };
@@ -231,14 +232,7 @@ export function SecurityPane({
 						>
 							导出日志
 						</button>
-						<button
-							type="button"
-							onClick={async () => {
-								await window.desktop.audit.clear();
-								onRefreshAudit();
-								notify("审计记录已清空");
-							}}
-						>
+						<button type="button" onClick={onClearAudit}>
 							清空记录
 						</button>
 					</div>

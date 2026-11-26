@@ -9,6 +9,7 @@ import { dirName, shortPath } from "../../core/format";
 import type { Session, SidebarView } from "../../core/session-filters";
 import { groupName, sortGroupEntries } from "../../hooks/use-workspace-meta";
 import { Icon } from "../common/Icon";
+import { ConfirmDialog } from "../modals/ConfirmDialog";
 import { SessionRow } from "./SessionRow";
 
 interface SidebarProps {
@@ -69,6 +70,10 @@ export function Sidebar({
 	const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 	// 批量选择：记录被勾选的会话 id，非空即进入批量态
 	const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+	// 危险操作二次确认：null 表示没有待确认的删除
+	const [pendingDelete, setPendingDelete] = useState<
+		{ kind: "batch"; targets: Session[] } | { kind: "group"; dir: string } | null
+	>(null);
 	const batchActive = checkedIds.size > 0;
 	const checkedCount = checkedIds.size;
 	const allChecked = sessions.length > 0 && sessions.every((item) => checkedIds.has(item.id));
@@ -86,8 +91,8 @@ export function Sidebar({
 		setCheckedIds(allChecked ? new Set() : new Set(sessions.map((item) => item.id)));
 	const confirmBatchDelete = () => {
 		const targets = sessions.filter((item) => checkedIds.has(item.id));
-		setCheckedIds(new Set());
-		if (targets.length > 0) onDeleteMany(targets);
+		if (targets.length === 0) return;
+		setPendingDelete({ kind: "batch", targets });
 	};
 	const clearChecked = () => setCheckedIds(new Set());
 	// 分组头三点菜单：记录展开中的分组路径，null 为全关
@@ -309,7 +314,7 @@ export function Sidebar({
 												role="menuitem"
 												className="danger"
 												onClick={() => {
-													onRemoveGroup(group);
+													setPendingDelete({ kind: "group", dir: group });
 													setGroupMenu(null);
 												}}
 											>
@@ -375,6 +380,32 @@ export function Sidebar({
 					设置
 				</button>
 			</div>
+			{pendingDelete?.kind === "batch" && (
+				<ConfirmDialog
+					title={`删除 ${pendingDelete.targets.length} 个会话`}
+					message="会从本地列表彻底移除，且无法恢复。确认删除吗？"
+					onConfirm={() => {
+						const targets = pendingDelete.targets;
+						setPendingDelete(null);
+						setCheckedIds(new Set());
+						onDeleteMany(targets);
+					}}
+					onCancel={() => setPendingDelete(null)}
+				/>
+			)}
+			{pendingDelete?.kind === "group" && (
+				<ConfirmDialog
+					title={`移除分组「${groupName(pendingDelete.dir, workspaces)}」`}
+					message="该分组下的所有会话会一并从本地删除，无法恢复。确认移除吗？"
+					confirmLabel="移除"
+					onConfirm={() => {
+						const dir = pendingDelete.dir;
+						setPendingDelete(null);
+						onRemoveGroup(dir);
+					}}
+					onCancel={() => setPendingDelete(null)}
+				/>
+			)}
 		</aside>
 	);
 }
