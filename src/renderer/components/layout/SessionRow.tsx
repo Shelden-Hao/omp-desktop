@@ -1,6 +1,8 @@
 /**
  * 会话列表行：选中、运行态、时间，以及「三点」操作菜单（置顶/重命名/打开文件夹/删除）。
  * 只有打开文件夹是 omp 之外的真实系统能力，其余三项都落在本地索引上，文案里不夸大。
+ * 批量选择：勾选框悬停显示，进入批量态后行点击改为切换勾选。
+ * 只有打开文件夹是 omp 之外的真实系统能力，其余三项都落在本地索引上，文案里不夸大。
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -22,6 +24,11 @@ interface SessionRowProps {
 	onRename(session: Session, title: string): void;
 	onOpenFolder(session: Session): void;
 	onDelete(session: Session): void;
+	/** 批量选择态：当前行是否被勾选 */
+	checked?: boolean;
+	/** 是否处于批量选择态（任一行被勾选） */
+	batchActive?: boolean;
+	onToggleSelect?(session: Session): void;
 }
 
 interface MenuPosition {
@@ -39,6 +46,9 @@ export function SessionRow({
 	onRename,
 	onOpenFolder,
 	onDelete,
+	checked = false,
+	batchActive = false,
+	onToggleSelect,
 }: SessionRowProps) {
 	const [menuOpen, setMenuOpen] = useState(false);
 	const [position, setPosition] = useState<MenuPosition>({ top: 0, left: 0 });
@@ -102,6 +112,18 @@ export function SessionRow({
 				menuOpen ? "menu-open" : ""
 			}`}
 		>
+			{onToggleSelect && (
+				<button
+					type="button"
+					role="checkbox"
+					aria-checked={checked}
+					aria-label={`选择会话 ${session.title}`}
+					className={`omp-check omp-session-check ${checked ? "checked" : ""}`}
+					onClick={() => onToggleSelect(session)}
+				>
+					{checked && <Icon name="check" size={12} />}
+				</button>
+			)}
 			{renaming ? (
 				<input
 					className="omp-session-rename"
@@ -126,9 +148,12 @@ export function SessionRow({
 					className="omp-session-main"
 					onClick={() => {
 						closeMenu();
+						if (batchActive && onToggleSelect) {
+							onToggleSelect(session);
+							return;
+						}
 						onSelect(session);
 					}}
-					title={session.title}
 				>
 					{!grouped && <Icon name={session.pinned ? "pin" : "chat"} size={14} />}
 					<span className="omp-session-title">{session.title}</span>

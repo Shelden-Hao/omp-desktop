@@ -96,6 +96,7 @@ export interface AgentConnection {
   togglePin: (id: string) => void;
   /** 仅从列表移除：omp 对话记录保留，靠 hidden 标记避免 session/list 加回来 */
   deleteSession: (session: Session) => Promise<void>;
+  deleteSessions: (targets: Session[]) => Promise<void>;
   changeApprovalMode: (mode: ApprovalMode) => Promise<void>;
 }
 
@@ -506,13 +507,30 @@ export function useAgentConnection({
     [client, createSession, messagesRef, runningRef, sessions, setStatus],
   );
 
-  const renameSession = useCallback(
-    (id: string, title: string) => {
-      const next = sessions.map((session) => (session.id === id ? { ...session, title } : session));
+  const persistWithout = useCallback(
+    (id: string, source: Session[]) => {
+      const next = source.filter((item) => item.id !== id);
+      // 记录 hidden：否则下次 session/list 会把它当成「omp 里有、本地没有」重新加回来
+      hiddenRef.current = [
+        ...hiddenRef.current.filter((item) => item.id !== id),
+        {
+          id,
+          title: source.find((item) => item.id === id)?.title ?? "",
+          cwd: source.find((item) => item.id === id)?.cwd || "",
+          ts: source.find((item) => item.id === id)?.ts,
+          hidden: true,
+        },
+      ];
       setSessions(next);
       void persistSessions(next);
+      setMessagesBySession((prev) => {
+        const copy = { ...prev };
+        delete copy[id];
+        return copy;
+      });
+      return next;
     },
-    [sessions, persistSessions],
+    [persistSessions, setMessagesBySession],
   );
 
   const togglePin = useCallback(
@@ -528,25 +546,7 @@ export function useAgentConnection({
 
   const deleteSession = useCallback(
     async (session: Session) => {
-      const next = sessions.filter((item) => item.id !== session.id);
-      // 记录 hidden：否则下次 session/list 会把它当成「omp 里有、本地没有」重新加回来
-      hiddenRef.current = [
-        ...hiddenRef.current.filter((item) => item.id !== session.id),
-        {
-          id: session.id,
-          title: session.title,
-          cwd: session.cwd || "",
-          ts: session.ts,
-          hidden: true,
-        },
-      ];
-      setSessions(next);
-      void persistSessions(next);
-      setMessagesBySession((prev) => {
-        const copy = { ...prev };
-        delete copy[session.id];
-        return copy;
-      });
+      const next = persistWithout(session.id, sessions);
       if (activeIdRef.current !== session.id) return;
       const fallback = next[0];
       if (fallback) {
@@ -558,15 +558,29 @@ export function useAgentConnection({
         setRunning(false);
       }
     },
-    [
-      client,
-      createSession,
-      persistSessions,
-      selectSession,
-      sessions,
-      setMessagesBySession,
-      setRunning,
-    ],
+    [activeIdRef, client, createSession, persistWithout, selectSession, sessions, setRunning],
+  );
+
+  /** 批量删除：逐个从列表移除并记录 hidden，最后一次性处理活跃会话回退 */
+  const deleteSessions = useCallback(
+    async (targets: Session[]) => {
+      let next = sessions;
+      for (const session of targets) {
+        next = persistWithout(session.id, next);
+      }
+      const ids = new Set(targets.map((item) => item.id));
+      if (!activeIdRef.current || !ids.has(activeIdRef.current)) return;
+      const fallback = next[0];
+      if (fallback) {
+        await selectSession(fallback);
+      } else if (client) {
+        await createSession([]);
+      } else {
+        setActiveId(null);
+        setRunning(false);
+      }
+    },
+    [activeIdRef, client, createSession, persistWithout, selectSession, sessions, setRunning],
   );
 
   /** 切换安全等级：omp 只接受启动参数，因此要重启 ACP 进程并恢复当前会话 */
@@ -622,6 +636,7 @@ export function useAgentConnection({
     renameSession,
     togglePin,
     deleteSession,
+    deleteSessions,
     changeApprovalMode,
   };
 }

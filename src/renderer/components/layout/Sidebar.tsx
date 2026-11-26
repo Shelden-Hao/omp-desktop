@@ -1,6 +1,7 @@
 /**
  * 侧栏：新建任务、技能入口、会话列表（最近 / 按工作目录分组）、底部设置。
  * 会话状态由上层推导后传入，这里只负责展示与选择。
+ * 批量删除：勾选任意会话后底部出现批量操作栏，可全选（限当前列表）或删除。
  */
 
 import { useState } from "react";
@@ -23,6 +24,7 @@ interface SidebarProps {
 	onRename(session: Session, title: string): void;
 	onOpenFolder(session: Session): void;
 	onDelete(session: Session): void;
+	onDeleteMany(targets: Session[]): void;
 	onNew(): void;
 	onOpenSkills(): void;
 	onOpenSettings(): void;
@@ -43,6 +45,7 @@ export function Sidebar({
 	onRename,
 	onOpenFolder,
 	onDelete,
+	onDeleteMany,
 	onNew,
 	onOpenSkills,
 	onOpenSettings,
@@ -50,6 +53,28 @@ export function Sidebar({
 }: SidebarProps) {
 	// 按工作空间分组时，每个分组可以单独收起；默认全部展开
 	const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+	// 批量选择：记录被勾选的会话 id，非空即进入批量态
+	const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+	const batchActive = checkedIds.size > 0;
+	const checkedCount = checkedIds.size;
+	const allChecked = sessions.length > 0 && sessions.every((item) => checkedIds.has(item.id));
+	const toggleSelect = (session: Session) =>
+		setCheckedIds((prev) => {
+			const next = new Set(prev);
+			if (next.has(session.id)) {
+				next.delete(session.id);
+			} else {
+				next.add(session.id);
+			}
+			return next;
+		});
+	const toggleAll = () =>
+		setCheckedIds(allChecked ? new Set() : new Set(sessions.map((item) => item.id)));
+	const confirmBatchDelete = () => {
+		const targets = sessions.filter((item) => checkedIds.has(item.id));
+		setCheckedIds(new Set());
+		if (targets.length > 0) onDeleteMany(targets);
+	};
 	const toggleGroup = (group: string) =>
 		setCollapsedGroups((prev) => ({ ...prev, [group]: !prev[group] }));
 
@@ -116,6 +141,9 @@ export function Sidebar({
 								onRename={onRename}
 								onOpenFolder={onOpenFolder}
 								onDelete={onDelete}
+								checked={checkedIds.has(session.id)}
+								batchActive={batchActive}
+								onToggleSelect={toggleSelect}
 							/>
 						))}
 					</div>
@@ -161,6 +189,9 @@ export function Sidebar({
 												onRename={onRename}
 												onOpenFolder={onOpenFolder}
 												onDelete={onDelete}
+												checked={checkedIds.has(session.id)}
+												batchActive={batchActive}
+												onToggleSelect={toggleSelect}
 											/>
 										))}
 								</div>
@@ -169,6 +200,28 @@ export function Sidebar({
 					</div>
 				)}
 			</div>
+
+			{batchActive && (
+				<div className="omp-batch-bar" role="toolbar" aria-label="批量操作">
+					<label className="omp-batch-all">
+						<input type="checkbox" checked={allChecked} onChange={toggleAll} />
+						<span>全选{checkedCount > 0 ? `（${checkedCount}）` : ""}</span>
+					</label>
+					<button
+						type="button"
+						className="omp-batch-delete"
+						disabled={checkedCount === 0}
+						onClick={confirmBatchDelete}
+					>
+						<Icon name="trash" size={14} />
+						<span>删除</span>
+					</button>
+					<button type="button" className="omp-batch-cancel" onClick={clearChecked}>
+						<Icon name="close" size={14} />
+						<span>取消</span>
+					</button>
+				</div>
+			)}
 
 			<div className="omp-sidebar-footer">
 				<div className="omp-workdir" title={cwd}>

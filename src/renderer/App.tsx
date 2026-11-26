@@ -365,6 +365,7 @@ export function App() {
 						});
 					}}
 					onDelete={(session) => connection.deleteSession(session)}
+					onDeleteMany={(targets) => void connection.deleteSessions(targets)}
 					onNew={() => void connection.newSession()}
 					onOpenSkills={() => setShowSkills(true)}
 					onOpenSettings={() => setShowSettings(true)}

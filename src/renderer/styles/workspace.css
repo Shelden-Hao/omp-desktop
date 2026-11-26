@@ -375,6 +375,93 @@
   padding-left: 26px;
 }
 
+/* ---------- 批量删除 ---------- */
+.omp-check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--surface-input);
+  color: transparent;
+  cursor: pointer;
+}
+.omp-check.checked {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
+.omp-check:hover {
+  border-color: var(--accent);
+}
+.omp-session-check {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.omp-session:hover .omp-session-check,
+.omp-session:focus-within .omp-session-check,
+.omp-session-check.checked {
+  opacity: 1;
+}
+.omp-batch-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-panel);
+}
+.omp-batch-all {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+.omp-batch-all input {
+  accent-color: var(--accent);
+  margin: 0;
+}
+.omp-batch-delete,
+.omp-batch-cancel {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+.omp-batch-delete {
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+  color: var(--danger);
+}
+.omp-batch-delete:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+.omp-batch-delete:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.omp-batch-cancel {
+  color: var(--text-secondary);
+}
+.omp-batch-cancel:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
 .omp-sidebar-footer {
   flex: none;
   display: flex;
