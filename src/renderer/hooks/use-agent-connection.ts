@@ -507,6 +507,15 @@ export function useAgentConnection({
     [client, createSession, messagesRef, runningRef, sessions, setStatus],
   );
 
+  const renameSession = useCallback(
+    (id: string, title: string) => {
+      const next = sessions.map((session) => (session.id === id ? { ...session, title } : session));
+      setSessions(next);
+      void persistSessions(next);
+    },
+    [sessions, persistSessions],
+  );
+
   const persistWithout = useCallback(
     (id: string, source: Session[]) => {
       const next = source.filter((item) => item.id !== id);

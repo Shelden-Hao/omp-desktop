@@ -75,6 +75,7 @@ export function Sidebar({
 		setCheckedIds(new Set());
 		if (targets.length > 0) onDeleteMany(targets);
 	};
+	const clearChecked = () => setCheckedIds(new Set());
 	const toggleGroup = (group: string) =>
 		setCollapsedGroups((prev) => ({ ...prev, [group]: !prev[group] }));
 
