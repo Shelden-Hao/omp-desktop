@@ -16,6 +16,7 @@ import {
 	type TimeFilter,
 } from "./core/session-filters";
 import { useAgentCapabilities } from "./hooks/use-agent-capabilities";
+import { useWorkspaceMeta } from "./hooks/use-workspace-meta";
 import { useAgentConnection } from "./hooks/use-agent-connection";
 import { useAgentPrompt } from "./hooks/use-agent-prompt";
 import { useChatDocs } from "./hooks/use-chat-docs";
@@ -91,6 +92,7 @@ export function App() {
 	const [workspaceOpen, setWorkspaceOpen] = useState(false);
 
 	const store = useMessageStore();
+	const workspaceMeta = useWorkspaceMeta();
 	const { running, runningRef, setRunning } = useRunningFlag();
 
 	// handleEvent 是 useCallback，读最新设置要走 ref，避免闭包拿到旧值
@@ -355,6 +357,7 @@ export function App() {
 					view={sidebarView}
 					filtersActive={filtersActive}
 					cwd={activeCwd}
+					workspaces={workspaceMeta.workspaces}
 					connected={connected}
 					onSelect={(session) => void connection.selectSession(session)}
 					onTogglePin={(session) => connection.togglePin(session.id)}
@@ -366,6 +369,14 @@ export function App() {
 					}}
 					onDelete={(session) => connection.deleteSession(session)}
 					onDeleteMany={(targets) => void connection.deleteSessions(targets)}
+					onNewIn={(dir) => void connection.newSessionIn(dir)}
+					onToggleGroupPin={(dir) => workspaceMeta.togglePin(dir)}
+					onRenameGroup={(dir, name) => workspaceMeta.rename(dir, name)}
+					onRemoveGroup={(dir) => {
+						const targets = sessions.filter((item) => (item.cwd || settings.cwd) === dir);
+						if (targets.length > 0) void connection.deleteSessions(targets);
+						workspaceMeta.remove(dir);
+					}}
 					onNew={() => void connection.newSession()}
 					onOpenSkills={() => setShowSkills(true)}
 					onOpenSettings={() => setShowSettings(true)}

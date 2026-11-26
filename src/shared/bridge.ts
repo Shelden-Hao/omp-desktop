@@ -23,6 +23,7 @@ import type {
   SkillUpdateSummary,
   SkillsReply,
   StoredSession,
+  StoredWorkspace,
   SystemInfoData,
   ToolResult,
 } from "./types";
@@ -72,6 +73,10 @@ export interface DesktopBridge {
   sessions: {
     get(): Promise<StoredSession[]>;
     set(next: StoredSession[]): Promise<StoredSession[]>;
+  };
+  workspaces: {
+    get(): Promise<StoredWorkspace[]>;
+    set(next: StoredWorkspace[]): Promise<StoredWorkspace[]>;
   };
   models: {
     context(): Promise<ModelContextInfo[]>;

@@ -89,6 +89,8 @@ export interface AgentConnection {
   rebindSession: (acp: AcpClient, oldId: string, cwd: string) => Promise<string>;
   selectSession: (session: Session) => Promise<void>;
   newSession: () => Promise<void>;
+  /** 在指定工作目录新建会话：分组头的「新建任务」用 */
+  newSessionIn: (dir: string) => Promise<void>;
   /** 切换工作目录 = 新建一个绑定该目录的会话（omp 的 cwd 在 session/new 时固定） */
   switchWorkspace: (dir: string) => Promise<void>;
   /** 重命名只改本地索引标题，omp 里的会话标题不受影响 */
@@ -484,6 +486,11 @@ export function useAgentConnection({
 
   const newSession = useCallback(() => createSession(sessions), [createSession, sessions]);
 
+  const newSessionIn = useCallback(
+    (dir: string) => createSession(sessions, dir),
+    [createSession, sessions],
+  );
+
   /**
    * 切换工作目录：会话的 cwd 在 omp 侧创建时就绑定死了，
    * 所以换目录等于换一个新会话；当前会话还是空的时候直接顶替掉，避免留下空壳。
@@ -641,6 +648,7 @@ export function useAgentConnection({
     rebindSession,
     selectSession,
     newSession,
+    newSessionIn,
     switchWorkspace,
     renameSession,
     togglePin,

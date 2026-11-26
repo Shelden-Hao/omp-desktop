@@ -1,12 +1,13 @@
 /**
  * 侧栏：新建任务、技能入口、会话列表（最近 / 按工作目录分组）、底部设置。
  * 会话状态由上层推导后传入，这里只负责展示与选择。
- * 批量删除：勾选任意会话后底部出现批量操作栏，可全选（限当前列表）或删除。
+ * 分组视图：分组头带「新建任务」与三点菜单（置顶/打开文件夹/编辑分组/移除分组）。
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { dirName, shortPath } from "../../core/format";
 import type { Session, SidebarView } from "../../core/session-filters";
+import { groupName, sortGroupEntries } from "../../hooks/use-workspace-meta";
 import { Icon } from "../common/Icon";
 import { SessionRow } from "./SessionRow";
 
@@ -14,6 +15,8 @@ interface SidebarProps {
 	collapsed: boolean;
 	sessions: Session[];
 	activeId: string | null;
+	/** 工作区分组元数据：别名与置顶 */
+	workspaces: StoredWorkspace[];
 	running: boolean;
 	view: SidebarView;
 	filtersActive: boolean;
@@ -25,6 +28,12 @@ interface SidebarProps {
 	onOpenFolder(session: Session): void;
 	onDelete(session: Session): void;
 	onDeleteMany(targets: Session[]): void;
+	/** 在指定工作目录新建会话（分组头按钮） */
+	onNewIn(dir: string): void;
+	/** 工作区分组操作：置顶/别名/移除，持久化在 sessions.json */
+	onToggleGroupPin(dir: string): void;
+	onRenameGroup(dir: string, name: string): void;
+	onRemoveGroup(dir: string): void;
 	onNew(): void;
 	onOpenSkills(): void;
 	onOpenSettings(): void;
@@ -35,17 +44,22 @@ export function Sidebar({
 	collapsed,
 	sessions,
 	activeId,
+	workspaces,
 	running,
 	view,
 	filtersActive,
-	cwd,
 	connected,
+	cwd,
 	onSelect,
 	onTogglePin,
 	onRename,
 	onOpenFolder,
 	onDelete,
 	onDeleteMany,
+	onNewIn,
+	onToggleGroupPin,
+	onRenameGroup,
+	onRemoveGroup,
 	onNew,
 	onOpenSkills,
 	onOpenSettings,
@@ -76,8 +90,38 @@ export function Sidebar({
 		if (targets.length > 0) onDeleteMany(targets);
 	};
 	const clearChecked = () => setCheckedIds(new Set());
+	// 分组头三点菜单：记录展开中的分组路径，null 为全关
+	const [groupMenu, setGroupMenu] = useState<string | null>(null);
+	// 编辑分组名：正在改名的分组路径 + 草稿
+	const [renamingGroup, setRenamingGroup] = useState<string | null>(null);
+	const [groupDraft, setGroupDraft] = useState("");
+	const commitGroupRename = () => {
+		if (renamingGroup) {
+			const name = groupDraft.trim();
+			if (name && name !== dirName(renamingGroup)) onRenameGroup(renamingGroup, name);
+		}
+		setRenamingGroup(null);
+	};
 	const toggleGroup = (group: string) =>
 		setCollapsedGroups((prev) => ({ ...prev, [group]: !prev[group] }));
+
+	// 分组菜单点外部或按 Esc 关闭：与 SessionRow 菜单一致的行为
+	useEffect(() => {
+		if (!groupMenu) return;
+		const onPointerDown = (event: MouseEvent) => {
+			const target = event.target as HTMLElement | null;
+			if (!target?.closest(".omp-group-row, .omp-group-menu")) setGroupMenu(null);
+		};
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") setGroupMenu(null);
+		};
+		document.addEventListener("mousedown", onPointerDown);
+		document.addEventListener("keydown", onKeyDown);
+		return () => {
+			document.removeEventListener("mousedown", onPointerDown);
+			document.removeEventListener("keydown", onKeyDown);
+		};
+	}, [groupMenu]);
 
 	return (
 		<aside className={`omp-sidebar ${collapsed ? "collapsed" : ""}`} aria-hidden={collapsed}>
@@ -155,28 +199,125 @@ export function Sidebar({
 								{filtersActive ? "没有符合条件的会话" : "还没有会话"}
 							</div>
 						)}
-						{Object.entries(
-							sessions.reduce<Record<string, Session[]>>((groups, session) => {
-								const key = session.cwd || cwd;
-								(groups[key] ||= []).push(session);
-								return groups;
-							}, {}),
+						{sortGroupEntries(
+							Object.entries(
+								sessions.reduce<Record<string, Session[]>>((groups, session) => {
+									const key = session.cwd || cwd;
+									(groups[key] ||= []).push(session);
+									return groups;
+								}, {}),
+							),
+							workspaces,
 						).map(([group, items]) => {
 							const isCollapsed = Boolean(collapsedGroups[group]);
+							const menuOpen = groupMenu === group;
 							return (
 								<div key={group} className="omp-session-group">
-									<button
-										type="button"
-										className={`omp-group-head ${isCollapsed ? "collapsed" : ""}`}
-										onClick={() => toggleGroup(group)}
-										aria-expanded={!isCollapsed}
-										title={group}
-									>
-										<Icon name="chevron" size={12} className="omp-group-chevron" />
-										<Icon name="folder" size={14} />
-										<span>{dirName(group)}</span>
-										<span className="omp-count">{items.length}</span>
-									</button>
+									{renamingGroup === group ? (
+										<input
+											className="omp-group-rename"
+											value={groupDraft}
+											autoFocus
+											aria-label="编辑分组名"
+											onChange={(event) => setGroupDraft(event.target.value)}
+											onBlur={commitGroupRename}
+											onKeyDown={(event) => {
+												if (event.key === "Enter") {
+													event.preventDefault();
+													commitGroupRename();
+												} else if (event.key === "Escape") {
+													event.preventDefault();
+													setRenamingGroup(null);
+												}
+											}}
+										/>
+									) : (
+										<div className="omp-group-row">
+											<button
+												type="button"
+												className={`omp-group-head ${isCollapsed ? "collapsed" : ""}`}
+												onClick={() => toggleGroup(group)}
+												aria-expanded={!isCollapsed}
+												title={group}
+											>
+												<Icon name="chevron" size={12} className="omp-group-chevron" />
+												<Icon name="folder" size={14} />
+												<span>{groupName(group, workspaces)}</span>
+												<span className="omp-count">{items.length}</span>
+											</button>
+											<button
+												type="button"
+												className="omp-group-new"
+												aria-label="在此目录新建任务"
+												title="新建任务"
+												disabled={!connected}
+												onClick={() => onNewIn(group)}
+											>
+												<Icon name="plus" size={13} />
+											</button>
+											<button
+												type="button"
+												className={`omp-group-more ${menuOpen ? "menu-open" : ""}`}
+												aria-label="分组操作"
+												aria-haspopup="menu"
+												aria-expanded={menuOpen}
+												onClick={() => setGroupMenu(menuOpen ? null : group)}
+											>
+												<Icon name="more" size={13} />
+											</button>
+										</div>
+									)}
+									{menuOpen && !renamingGroup && (
+										<div className="omp-group-menu" role="menu" aria-label="工作区分组操作">
+											<button
+												type="button"
+												role="menuitem"
+												onClick={() => {
+													onToggleGroupPin(group);
+													setGroupMenu(null);
+												}}
+											>
+												<Icon name="pin" size={14} />
+												<span>置顶</span>
+											</button>
+											<button
+												type="button"
+												role="menuitem"
+												onClick={() => {
+													onOpenFolder({ id: group, title: dirName(group), cwd: group });
+													setGroupMenu(null);
+												}}
+											>
+												<Icon name="folder" size={14} />
+												<span>打开文件夹</span>
+											</button>
+											<button
+												type="button"
+												role="menuitem"
+												onClick={() => {
+													setGroupDraft(dirName(group));
+													setRenamingGroup(group);
+													setGroupMenu(null);
+												}}
+											>
+												<Icon name="pencil" size={14} />
+												<span>编辑分组</span>
+											</button>
+											<div className="omp-session-menu-seg" />
+											<button
+												type="button"
+												role="menuitem"
+												className="danger"
+												onClick={() => {
+													onRemoveGroup(group);
+													setGroupMenu(null);
+												}}
+											>
+												<Icon name="trash" size={14} />
+												<span>移除分组</span>
+											</button>
+										</div>
+									)}
 									{!isCollapsed &&
 										items.map((session) => (
 											<SessionRow

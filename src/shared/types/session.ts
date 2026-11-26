@@ -82,3 +82,13 @@ export interface StoredSession {
   /** 已从列表移除：只用来阻止 session/list 把它加回来，omp 里的对话记录仍然保留 */
   hidden?: boolean;
 }
+
+/** 工作区分组的本地元数据：别名与置顶，存在 sessions.json 的 workspaces 字段 */
+export interface StoredWorkspace {
+  /** 工作目录绝对路径，分组主键 */
+  cwd: string;
+  /** 分组显示名，缺省用目录名 */
+  name?: string;
+  /** 置顶分组排在最前 */
+  pinned?: boolean;
+}

@@ -10,6 +10,10 @@ const bridge: DesktopBridge = {
 		get: () => ipcRenderer.invoke("sessions:get"),
 		set: (next) => ipcRenderer.invoke("sessions:set", next),
 	},
+	workspaces: {
+		get: () => ipcRenderer.invoke("workspaces:get"),
+		set: (next) => ipcRenderer.invoke("workspaces:set", next),
+	},
 	models: {
 		context: () => ipcRenderer.invoke("models:context"),
 		list: () => ipcRenderer.invoke("models:list"),

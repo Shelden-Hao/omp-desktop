@@ -462,6 +462,100 @@
   color: var(--text-primary);
 }
 
+/* ---------- 工作区分组操作 ---------- */
+.omp-group-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: var(--radius-sm);
+}
+.omp-group-row .omp-group-head {
+  flex: 1;
+  min-width: 0;
+}
+.omp-group-new,
+.omp-group-more {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.omp-session-group:hover .omp-group-new,
+.omp-session-group:hover .omp-group-more,
+.omp-group-more.menu-open {
+  opacity: 1;
+}
+.omp-group-new:hover,
+.omp-group-more:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+.omp-group-new:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.omp-group-menu {
+  position: relative;
+  z-index: 80;
+  margin: 2px 0 var(--space-2);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-panel);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.16),
+    0 2px 6px rgba(0, 0, 0, 0.06);
+}
+.omp-group-menu button {
+  width: 100%;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--font-md);
+  text-align: left;
+  cursor: pointer;
+}
+.omp-group-menu button:hover {
+  background: var(--surface-hover);
+}
+.omp-group-menu button svg {
+  color: var(--text-muted);
+}
+.omp-group-menu button.danger,
+.omp-group-menu button.danger svg {
+  color: var(--danger);
+}
+.omp-group-rename {
+  width: 100%;
+  height: 26px;
+  margin-bottom: 2px;
+  padding: 0 8px;
+  border: 1px solid var(--accent-ring);
+  border-radius: var(--radius-sm);
+  background: var(--surface-input);
+  color: var(--text-primary);
+  font: inherit;
+  outline: none;
+}
+
 .omp-sidebar-footer {
   flex: none;
   display: flex;
