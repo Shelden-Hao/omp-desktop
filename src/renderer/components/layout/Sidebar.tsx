@@ -1,7 +1,7 @@
 /**
  * 侧栏：新建任务、技能入口、会话列表（最近 / 按工作目录分组）、底部设置。
  * 会话状态由上层推导后传入，这里只负责展示与选择。
- * 分组视图：分组头带「新建任务」与三点菜单（置顶/打开文件夹/编辑分组/移除分组）。
+ * 分组视图：分组头带「新建任务」与三点菜单（置顶/打开文件夹/编辑分组/归档并移除分组）。
  */
 
 import { useEffect, useState } from "react";
@@ -27,8 +27,8 @@ interface SidebarProps {
 	onTogglePin(session: Session): void;
 	onRename(session: Session, title: string): void;
 	onOpenFolder(session: Session): void;
-	onDelete(session: Session): void;
-	onDeleteMany(targets: Session[]): void;
+	onArchive(session: Session): void;
+	onArchiveMany(targets: Session[]): void;
 	/** 在指定工作目录新建会话（分组头按钮） */
 	onNewIn(dir: string): void;
 	/** 工作区分组操作：置顶/别名/移除，持久化在 sessions.json */
@@ -55,8 +55,8 @@ export function Sidebar({
 	onTogglePin,
 	onRename,
 	onOpenFolder,
-	onDelete,
-	onDeleteMany,
+	onArchive,
+	onArchiveMany,
 	onNewIn,
 	onToggleGroupPin,
 	onRenameGroup,
@@ -70,8 +70,8 @@ export function Sidebar({
 	const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 	// 批量选择：记录被勾选的会话 id，非空即进入批量态
 	const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
-	// 危险操作二次确认：null 表示没有待确认的删除
-	const [pendingDelete, setPendingDelete] = useState<
+	// 归档二次确认：null 表示没有待确认的归档
+	const [pendingArchive, setPendingArchive] = useState<
 		{ kind: "batch"; targets: Session[] } | { kind: "group"; dir: string } | null
 	>(null);
 	const batchActive = checkedIds.size > 0;
@@ -89,10 +89,10 @@ export function Sidebar({
 		});
 	const toggleAll = () =>
 		setCheckedIds(allChecked ? new Set() : new Set(sessions.map((item) => item.id)));
-	const confirmBatchDelete = () => {
+	const confirmBatchArchive = () => {
 		const targets = sessions.filter((item) => checkedIds.has(item.id));
 		if (targets.length === 0) return;
-		setPendingDelete({ kind: "batch", targets });
+		setPendingArchive({ kind: "batch", targets });
 	};
 	const clearChecked = () => setCheckedIds(new Set());
 	// 分组头三点菜单：记录展开中的分组路径，null 为全关
@@ -190,7 +190,7 @@ export function Sidebar({
 								onTogglePin={onTogglePin}
 								onRename={onRename}
 								onOpenFolder={onOpenFolder}
-								onDelete={onDelete}
+								onArchive={onArchive}
 								checked={checkedIds.has(session.id)}
 								batchActive={batchActive}
 								onToggleSelect={toggleSelect}
@@ -314,12 +314,12 @@ export function Sidebar({
 												role="menuitem"
 												className="danger"
 												onClick={() => {
-													setPendingDelete({ kind: "group", dir: group });
+													setPendingArchive({ kind: "group", dir: group });
 													setGroupMenu(null);
 												}}
 											>
-												<Icon name="trash" size={14} />
-												<span>移除分组</span>
+												<Icon name="archive" size={14} />
+												<span>归档并移除分组</span>
 											</button>
 										</div>
 									)}
@@ -335,7 +335,7 @@ export function Sidebar({
 												onTogglePin={onTogglePin}
 												onRename={onRename}
 												onOpenFolder={onOpenFolder}
-												onDelete={onDelete}
+												onArchive={onArchive}
 												checked={checkedIds.has(session.id)}
 												batchActive={batchActive}
 												onToggleSelect={toggleSelect}
@@ -356,12 +356,12 @@ export function Sidebar({
 					</label>
 					<button
 						type="button"
-						className="omp-batch-delete"
+						className="omp-batch-archive"
 						disabled={checkedCount === 0}
-						onClick={confirmBatchDelete}
+						onClick={confirmBatchArchive}
 					>
-						<Icon name="trash" size={14} />
-						<span>删除</span>
+						<Icon name="archive" size={14} />
+						<span>归档</span>
 					</button>
 					<button type="button" className="omp-batch-cancel" onClick={clearChecked}>
 						<Icon name="close" size={14} />
@@ -380,30 +380,31 @@ export function Sidebar({
 					设置
 				</button>
 			</div>
-			{pendingDelete?.kind === "batch" && (
+			{pendingArchive?.kind === "batch" && (
 				<ConfirmDialog
-					title={`删除 ${pendingDelete.targets.length} 个会话`}
-					message="会从本地列表彻底移除，且无法恢复。确认删除吗？"
+					title={`归档 ${pendingArchive.targets.length} 个会话`}
+					message="会关闭这些 omp 会话并从本地列表移除，不会删除 omp 服务端保存的对话记录文件。确认归档吗？"
+					confirmLabel="归档"
 					onConfirm={() => {
-						const targets = pendingDelete.targets;
-						setPendingDelete(null);
+						const targets = pendingArchive.targets;
+						setPendingArchive(null);
 						setCheckedIds(new Set());
-						onDeleteMany(targets);
+						onArchiveMany(targets);
 					}}
-					onCancel={() => setPendingDelete(null)}
+					onCancel={() => setPendingArchive(null)}
 				/>
 			)}
-			{pendingDelete?.kind === "group" && (
+			{pendingArchive?.kind === "group" && (
 				<ConfirmDialog
-					title={`移除分组「${groupName(pendingDelete.dir, workspaces)}」`}
-					message="该分组下的所有会话会一并从本地删除，无法恢复。确认移除吗？"
-					confirmLabel="移除"
+					title={`归档并移除分组「${groupName(pendingArchive.dir, workspaces)}」`}
+					message="该分组下的所有会话会一并归档：关闭 omp 会话并从本地列表移除，不会删除 omp 服务端保存的对话记录文件；分组的本地显示配置也会移除。确认吗？"
+					confirmLabel="归档并移除"
 					onConfirm={() => {
-						const dir = pendingDelete.dir;
-						setPendingDelete(null);
+						const dir = pendingArchive.dir;
+						setPendingArchive(null);
 						onRemoveGroup(dir);
 					}}
-					onCancel={() => setPendingDelete(null)}
+					onCancel={() => setPendingArchive(null)}
 				/>
 			)}
 		</aside>

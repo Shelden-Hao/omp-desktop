@@ -283,6 +283,14 @@ export class AcpClient {
     });
   }
 
+  /**
+   * 关闭会话：ACP 标准方法，omp 侧标记 closed_at（不删除 jsonl 文件）。
+   * 外壳没有直接删 omp 私有文件的权限，归档会话按钮走这里。
+   */
+  async closeSession(sessionId: string) {
+    return this.request("session/close", { sessionId });
+  }
+
   cancel(sessionId: string) {
     this.notify("session/cancel", { sessionId });
   }

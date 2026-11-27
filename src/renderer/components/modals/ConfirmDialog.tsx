@@ -1,14 +1,14 @@
 /**
- * 通用危险操作确认弹窗：所有不可恢复的删除（会话批量删除、分组移除、
- * 模型删除、审计清空等）都走这里，二次确认后才真正执行。
+ * 通用二次确认弹窗：归档会话、移除分组、删除模型、清空审计等
+ * 需要用户明确知晓后果的操作都走这里，确认后才真正执行。
  */
 
 import { Icon } from "../common/Icon";
 
 interface ConfirmDialogProps {
-	/** 弹窗标题，如「删除 3 个会话」 */
+	/** 弹窗标题，如「归档 3 个会话」 */
 	title: string;
-	/** 说明文案，明确告知后果不可恢复 */
+	/** 说明文案，明确告知操作后果 */
 	message: string;
 	confirmLabel?: string;
 	onConfirm(): void;
