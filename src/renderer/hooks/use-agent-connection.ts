@@ -599,6 +599,18 @@ export function useAgentConnection({
     [activeIdRef, client, createSession, persistWithout, selectSession, sessions, setRunning],
   );
 
+  /** 手动重启 omp：进程意外退出后给用户一个恢复入口，复用 epoch 重建连接 */
+  const restart = useCallback(() => {
+    if (runningRef.current) {
+      setStatus("任务运行中，结束后再重启 omp");
+      return;
+    }
+    setConnected(false);
+    setRunning(false);
+    setStatus("正在重启 omp…");
+    setEpoch((value) => value + 1);
+  }, [runningRef, setRunning]);
+
   /** 切换安全等级：omp 只接受启动参数，因此要重启 ACP 进程并恢复当前会话 */
   const changeApprovalMode = useCallback(
     async (mode: ApprovalMode) => {
@@ -654,6 +666,7 @@ export function useAgentConnection({
     togglePin,
     deleteSession,
     deleteSessions,
+    restart,
     changeApprovalMode,
   };
 }

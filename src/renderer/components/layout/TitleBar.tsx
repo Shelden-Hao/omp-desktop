@@ -27,6 +27,7 @@ interface TitleBarProps {
 	activeTitle: string;
 	connected: boolean;
 	status: string;
+	onRestart(): void;
 	searchOpen: boolean;
 	onToggleSearch(): void;
 	showPreview: boolean;
@@ -49,6 +50,7 @@ export function TitleBar({
 	activeTitle,
 	connected,
 	status,
+	onRestart,
 	searchOpen,
 	onToggleSearch,
 	showPreview,
@@ -145,10 +147,22 @@ export function TitleBar({
 				</strong>
 			</div>
 			<div className="omp-titlebar-right">
-				<span className={`omp-connection ${connected ? "online" : "offline"}`} title={status}>
-					<span className="omp-connection-dot" />
-					{connected ? "已连接" : "未连接"}
-				</span>
+				{connected ? (
+					<span className="omp-connection online" title={status}>
+						<span className="omp-connection-dot" />
+						已连接
+					</span>
+				) : (
+					<button
+						type="button"
+						className="omp-connection offline"
+						title={status ? `${status}，点击重启` : "点击重启 omp"}
+						onClick={onRestart}
+					>
+						<span className="omp-connection-dot" />
+						重启 omp
+					</button>
+				)}
 				<span className="omp-title-divider" />
 				<span className="omp-title-tip">
 					<button
