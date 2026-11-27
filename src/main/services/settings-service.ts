@@ -5,7 +5,7 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { app } from "electron";
 import {
 	POLICY_TOOLS,
@@ -34,12 +34,17 @@ function firstExisting(candidates: string[]): string {
 }
 
 function findBun(home: string, npmGlobal: string): string {
-	const fromPath = (process.env.PATH || "").split(/[;:]/).map((dir) => dir.replace(/^"|"$/g, ""));
+	// 必须用 path.delimiter：Windows 用 ; 分隔，盘符里的冒号不能当分隔符。
+	const fromPath = (process.env.PATH || "")
+		.split(delimiter)
+		.map((dir) => dir.replace(/^"|"$/g, ""));
+	// 可执行文件名按平台派生，非 Windows 没有 .exe 后缀。
+	const bunExe = process.platform === "win32" ? "bun.exe" : "bun";
 	const candidates: string[] = [];
 	for (const dir of fromPath) {
-		if (/node\/versions/i.test(dir))
-			candidates.push(join(dir, "node_modules", "bun", "bin", "bun.exe"));
-		candidates.push(join(dir, "bun.exe"));
+		if (/node[\\/]versions/i.test(dir))
+			candidates.push(join(dir, "node_modules", "bun", "bin", bunExe));
+		candidates.push(join(dir, bunExe));
 	}
 	// 部分工具链会把 bun 装在版本化 node 目录里，逐个扫描。
 	const versionRoots = [
@@ -49,13 +54,13 @@ function findBun(home: string, npmGlobal: string): string {
 	for (const root of versionRoots) {
 		try {
 			for (const entry of readdirSync(root)) {
-				candidates.push(join(root, entry, "node_modules", "bun", "bin", "bun.exe"));
+				candidates.push(join(root, entry, "node_modules", "bun", "bin", bunExe));
 			}
 		} catch {
 			// 目录不存在则跳过
 		}
 	}
-	candidates.push(join(home, ".bun", "bin", "bun.exe"), join(npmGlobal, "bun", "bin", "bun.exe"));
+	candidates.push(join(home, ".bun", "bin", bunExe), join(npmGlobal, "bun", "bin", bunExe));
 	return firstExisting(candidates);
 }
 
