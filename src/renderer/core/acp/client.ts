@@ -8,7 +8,28 @@ import type { DesktopBridge } from "../../../shared/bridge";
 import type { AcpEvent } from "../../../shared/protocol";
 import type { SessionConfigOption, SessionModeState, SessionState } from "../../../shared/types";
 
-type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void };
+type Pending = {
+  resolve: (v: unknown) => void;
+  reject: (e: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+  method: string;
+  timeoutMs: number;
+};
+
+/**
+ * 分级超时：握手/会话管理类快速失败；prompt 允许长任务，但收到 session/update
+ * 说明 agent 仍在干活时会续期，连续 5 分钟无任何帧才判定僵死。
+ */
+const REQUEST_TIMEOUT: Record<string, number> = {
+  initialize: 10_000,
+  "session/new": 15_000,
+  "session/load": 15_000,
+  "session/list": 15_000,
+  "session/set_mode": 15_000,
+  "session/set_config_option": 15_000,
+  "session/prompt": 5 * 60_000,
+};
+const DEFAULT_TIMEOUT = 15_000;
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
@@ -107,9 +128,29 @@ export class AcpClient {
 
   stop() {
     this.offFrame();
-    for (const p of this.pending.values()) p.reject(new Error("agent stopped"));
+    for (const p of this.pending.values()) {
+      clearTimeout(p.timer);
+      p.reject(new Error("agent stopped"));
+    }
     this.pending.clear();
     this.bridge.agent.stop();
+  }
+
+  /** 超时后从 pending 清除并 reject，调用方（use-agent-prompt 等）已有 catch/finally 复位 UI */
+  private expire(id: number, method: string) {
+    const p = this.pending.get(id);
+    if (!p) return;
+    this.pending.delete(id);
+    p.reject(new Error(`${method} 请求超时：omp 无响应`));
+  }
+
+  /** 收到 agent 帧时给 prompt 续期：长任务可以跑很久，但不能永久卡住 UI */
+  private refreshPromptTimeout() {
+    for (const [id, p] of this.pending) {
+      if (p.method !== "session/prompt") continue;
+      clearTimeout(p.timer);
+      p.timer = setTimeout(() => this.expire(id, p.method), p.timeoutMs);
+    }
   }
 
   onEvent(cb: (e: AcpEvent) => void): () => void {
@@ -121,15 +162,20 @@ export class AcpClient {
     for (const cb of this.listeners) cb(e);
   }
 
-  /** 发请求，等待响应 */
+  /** 发请求，等待响应；超时后清理 pending 并 reject，避免 UI 永久运行中 */
   request(method: string, params: unknown): Promise<unknown> {
     const id = this.nextId++;
+    const timeoutMs = REQUEST_TIMEOUT[method] ?? DEFAULT_TIMEOUT;
     const line = JSON.stringify({ jsonrpc: "2.0", id, method, params });
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      const timer = setTimeout(() => this.expire(id, method), timeoutMs);
+      this.pending.set(id, { resolve, reject, timer, method, timeoutMs });
       this.bridge.agent.send(line).then((r) => {
         if (!r.ok) {
+          const p = this.pending.get(id);
+          if (!p) return;
           this.pending.delete(id);
+          clearTimeout(p.timer);
           reject(new Error(r.error || "send failed"));
         }
       });
@@ -157,10 +203,14 @@ export class AcpClient {
       return;
     }
 
+    // 收到任何帧都说明 omp 还活着，给在途 prompt 续期（长任务不该被固定超时误杀）
+    this.refreshPromptTimeout();
+
     if (typeof msg.id === "number" && ("result" in msg || "error" in msg)) {
       const p = this.pending.get(msg.id);
       if (p) {
         this.pending.delete(msg.id);
+        clearTimeout(p.timer);
         if (msg.error) p.reject(new Error(JSON.stringify(msg.error)));
         else p.resolve(msg.result);
       }
