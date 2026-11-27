@@ -234,10 +234,18 @@
   align-items: center;
   gap: 5px;
   padding: 2px 7px;
+  border: 0;
   border-radius: 999px;
   background: var(--surface-subtle);
   color: var(--text-secondary);
   font-size: var(--font-xs);
+}
+button.omp-connection {
+  cursor: pointer;
+}
+button.omp-connection:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
 }
 .omp-connection-dot {
   width: 5px;

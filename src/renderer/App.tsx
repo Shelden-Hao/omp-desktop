@@ -341,6 +341,7 @@ export function App() {
 				activeTitle={activeTitle}
 				connected={connected}
 				status={status}
+				onRestart={connection.restart}
 				searchOpen={search.open}
 				onToggleSearch={() => (search.open ? search.closeSearch() : search.openSearch())}
 				showPreview={docsState.showPreview}
