@@ -213,6 +213,10 @@ export function useComposerEditor({ docs, messages, onSubmit }: ComposerEditorOp
   };
 
   const onEditorKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const native = event.nativeEvent;
+    // 输入法组词时的 Enter/Tab 是「确认候选词」，不是发送或联想确认。
+    // compositionend 与 keydown 的先后顺序因浏览器而异，三个信号都要挡。
+    if (composingRef.current || native.isComposing || native.keyCode === 229) return;
     if (resourceSuggestOpen && resourceCandidates.length > 0) {
       if (event.key === "ArrowDown") {
         event.preventDefault();
