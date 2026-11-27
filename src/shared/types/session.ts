@@ -79,7 +79,7 @@ export interface StoredSession {
   ts?: number;
   /** 置顶：纯本地排序偏好，omp 没有对应能力 */
   pinned?: boolean;
-  /** 已从列表移除：只用来阻止 session/list 把它加回来，omp 里的对话记录仍然保留 */
+  /** 已归档：omp 侧已 session/close，本地标记阻止 session/list 把它加回来；服务端对话文件保留 */
   hidden?: boolean;
 }
 

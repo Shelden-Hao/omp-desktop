@@ -375,7 +375,7 @@
   padding-left: 26px;
 }
 
-/* ---------- 批量删除 ---------- */
+/* ---------- 批量归档 ---------- */
 .omp-check {
   flex: none;
   width: 16px;
@@ -429,7 +429,7 @@
   accent-color: var(--accent);
   margin: 0;
 }
-.omp-batch-delete,
+.omp-batch-archive,
 .omp-batch-cancel {
   flex: none;
   display: flex;
@@ -443,14 +443,14 @@
   font-size: var(--font-sm);
   cursor: pointer;
 }
-.omp-batch-delete {
+.omp-batch-archive {
   border-color: color-mix(in srgb, var(--danger) 45%, transparent);
   color: var(--danger);
 }
-.omp-batch-delete:hover:not(:disabled) {
+.omp-batch-archive:hover:not(:disabled) {
   background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
-.omp-batch-delete:disabled {
+.omp-batch-archive:disabled {
   opacity: 0.45;
   cursor: default;
 }

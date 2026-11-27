@@ -368,14 +368,14 @@ export function App() {
 							if (!reply.ok) setStatus(`打开文件夹失败：${reply.error || "路径不可用"}`);
 						});
 					}}
-					onDelete={(session) => connection.deleteSession(session)}
-					onDeleteMany={(targets) => void connection.deleteSessions(targets)}
+					onArchive={(session) => void connection.archiveSession(session)}
+					onArchiveMany={(targets) => void connection.archiveSessions(targets)}
 					onNewIn={(dir) => void connection.newSessionIn(dir)}
 					onToggleGroupPin={(dir) => workspaceMeta.togglePin(dir)}
 					onRenameGroup={(dir, name) => workspaceMeta.rename(dir, name)}
 					onRemoveGroup={(dir) => {
 						const targets = sessions.filter((item) => (item.cwd || settings.cwd) === dir);
-						if (targets.length > 0) void connection.deleteSessions(targets);
+						if (targets.length > 0) void connection.archiveSessions(targets);
 						workspaceMeta.remove(dir);
 					}}
 					onNew={() => void connection.newSession()}

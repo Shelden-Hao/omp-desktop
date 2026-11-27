@@ -96,9 +96,9 @@ export interface AgentConnection {
   /** 重命名只改本地索引标题，omp 里的会话标题不受影响 */
   renameSession: (id: string, title: string) => void;
   togglePin: (id: string) => void;
-  /** 仅从列表移除：omp 对话记录保留，靠 hidden 标记避免 session/list 加回来 */
-  deleteSession: (session: Session) => Promise<void>;
-  deleteSessions: (targets: Session[]) => Promise<void>;
+  /** 归档会话：关闭 omp 会话并从列表移除；不删除服务端对话文件，靠本地归档标记避免加回 */
+  archiveSession: (session: Session) => Promise<void>;
+  archiveSessions: (targets: Session[]) => Promise<void>;
   changeApprovalMode: (mode: ApprovalMode) => Promise<void>;
 }
 
@@ -127,7 +127,7 @@ export function useAgentConnection({
   const activeIdRef = useRef<string | null>(null);
   const loadedSessions = useRef<Set<string>>(new Set());
   const pendingPermissionRef = useRef<PermissionState | null>(null);
-  /** 已从列表移除的会话记录：persist 时一并写回，重启后仍能挡住 session/list */
+  /** 已归档会话的本地标记：persist 时一并写回，重启后仍能挡住 session/list */
   const hiddenRef = useRef<StoredSession[]>([]);
   /** 正在静默采集 `/context` 输出时指向该会话，期间的 chunk 不进对话 */
   const silentContextRef = useRef<{ sessionId: string; text: string } | null>(null);
@@ -386,6 +386,8 @@ export function useAgentConnection({
         const stored = await bridge.sessions.get();
         hiddenRef.current = stored.filter((session) => session.hidden);
         const index = await loadSessionIndex(acp, loaded, stored);
+        // 用清理后的 hidden 覆盖启动时全量加载的旧值：omp 侧已不存在的 id 不再滞留
+        hiddenRef.current = index.hidden;
         const { list } = index;
         if (index.created) {
           const created = index.created;
@@ -455,7 +457,7 @@ export function useAgentConnection({
     [client, loadSessionHistory, probeContext, setRunning],
   );
 
-  /** 以给定列表为基础新建 omp 会话；删除最后一个会话后也走这里补一个空的 */
+  /** 以给定列表为基础新建 omp 会话；归档最后一个会话后也走这里补一个空的 */
   const createSession = useCallback(
     async (base: Session[], dir?: string) => {
       if (!client) return;
@@ -523,10 +525,10 @@ export function useAgentConnection({
     [sessions, persistSessions],
   );
 
-  const persistWithout = useCallback(
+  const markArchived = useCallback(
     (id: string, source: Session[]) => {
       const next = source.filter((item) => item.id !== id);
-      // 记录 hidden：否则下次 session/list 会把它当成「omp 里有、本地没有」重新加回来
+      // 写入归档标记（hidden 字段沿用旧 key）：否则下次 session/list 会把它当成「omp 里有、本地没有」重新加回来
       hiddenRef.current = [
         ...hiddenRef.current.filter((item) => item.id !== id),
         {
@@ -560,9 +562,27 @@ export function useAgentConnection({
     [sessions, persistSessions],
   );
 
-  const deleteSession = useCallback(
+  /**
+   * 归档会话：先通过 ACP session/close 关闭 omp 侧的会话（标记 closed_at），
+   * 再从本地列表移除并写归档标记。不会删除 omp 服务端保存的对话记录文件；
+   * 关闭失败也继续本地移除，避免 omp 异常时归档不了，状态栏给出提示。
+   */
+  const closeOnAgent = useCallback(
+    async (id: string) => {
+      if (!client) return;
+      try {
+        await client.closeSession(id);
+      } catch (error) {
+        setStatus(`关闭 omp 会话失败：${(error as Error).message}`);
+      }
+    },
+    [client, setStatus],
+  );
+
+  const archiveSession = useCallback(
     async (session: Session) => {
-      const next = persistWithout(session.id, sessions);
+      await closeOnAgent(session.id);
+      const next = markArchived(session.id, sessions);
       if (activeIdRef.current !== session.id) return;
       const fallback = next[0];
       if (fallback) {
@@ -574,15 +594,25 @@ export function useAgentConnection({
         setRunning(false);
       }
     },
-    [activeIdRef, client, createSession, persistWithout, selectSession, sessions, setRunning],
+    [
+      activeIdRef,
+      client,
+      closeOnAgent,
+      createSession,
+      markArchived,
+      selectSession,
+      sessions,
+      setRunning,
+    ],
   );
 
-  /** 批量删除：逐个从列表移除并记录 hidden，最后一次性处理活跃会话回退 */
-  const deleteSessions = useCallback(
+  /** 批量归档：逐个关闭并从列表移除，最后一次性处理活跃会话回退 */
+  const archiveSessions = useCallback(
     async (targets: Session[]) => {
       let next = sessions;
       for (const session of targets) {
-        next = persistWithout(session.id, next);
+        await closeOnAgent(session.id);
+        next = markArchived(session.id, next);
       }
       const ids = new Set(targets.map((item) => item.id));
       if (!activeIdRef.current || !ids.has(activeIdRef.current)) return;
@@ -596,7 +626,16 @@ export function useAgentConnection({
         setRunning(false);
       }
     },
-    [activeIdRef, client, createSession, persistWithout, selectSession, sessions, setRunning],
+    [
+      activeIdRef,
+      client,
+      closeOnAgent,
+      createSession,
+      markArchived,
+      selectSession,
+      sessions,
+      setRunning,
+    ],
   );
 
   /** 手动重启 omp：进程意外退出后给用户一个恢复入口，复用 epoch 重建连接 */
@@ -664,8 +703,8 @@ export function useAgentConnection({
     switchWorkspace,
     renameSession,
     togglePin,
-    deleteSession,
-    deleteSessions,
+    archiveSession,
+    archiveSessions,
     restart,
     changeApprovalMode,
   };

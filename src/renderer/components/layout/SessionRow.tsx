@@ -1,5 +1,5 @@
 /**
- * 会话列表行：选中、运行态、时间，以及「三点」操作菜单（置顶/重命名/打开文件夹/删除）。
+ * 会话列表行：选中、运行态、时间，以及「三点」操作菜单（置顶/重命名/打开文件夹/归档）。
  * 只有打开文件夹是 omp 之外的真实系统能力，其余三项都落在本地索引上，文案里不夸大。
  * 批量选择：勾选框悬停显示，进入批量态后行点击改为切换勾选。
  * 只有打开文件夹是 omp 之外的真实系统能力，其余三项都落在本地索引上，文案里不夸大。
@@ -23,7 +23,7 @@ interface SessionRowProps {
 	onTogglePin(session: Session): void;
 	onRename(session: Session, title: string): void;
 	onOpenFolder(session: Session): void;
-	onDelete(session: Session): void;
+	onArchive(session: Session): void;
 	/** 批量选择态：当前行是否被勾选 */
 	checked?: boolean;
 	/** 是否处于批量选择态（任一行被勾选） */
@@ -45,14 +45,14 @@ export function SessionRow({
 	onTogglePin,
 	onRename,
 	onOpenFolder,
-	onDelete,
+	onArchive,
 	checked = false,
 	batchActive = false,
 	onToggleSelect,
 }: SessionRowProps) {
 	const [menuOpen, setMenuOpen] = useState(false);
 	const [position, setPosition] = useState<MenuPosition>({ top: 0, left: 0 });
-	const [confirmDelete, setConfirmDelete] = useState(false);
+	const [confirmArchive, setConfirmArchive] = useState(false);
 	const [renaming, setRenaming] = useState(false);
 	const [draft, setDraft] = useState("");
 	const rowRef = useRef<HTMLDivElement>(null);
@@ -60,7 +60,7 @@ export function SessionRow({
 
 	const closeMenu = () => {
 		setMenuOpen(false);
-		setConfirmDelete(false);
+		setConfirmArchive(false);
 	};
 
 	useDismiss(menuOpen, { ref: rowRef, onDismiss: closeMenu });
@@ -70,7 +70,7 @@ export function SessionRow({
 		if (!menuOpen) return;
 		const onScroll = () => {
 			setMenuOpen(false);
-			setConfirmDelete(false);
+			setConfirmArchive(false);
 		};
 		document.addEventListener("scroll", onScroll, true);
 		return () => document.removeEventListener("scroll", onScroll, true);
@@ -88,7 +88,7 @@ export function SessionRow({
 				left: Math.max(8, Math.min(rect.right - MENU_WIDTH, window.innerWidth - MENU_WIDTH - 8)),
 			});
 		}
-		setConfirmDelete(false);
+		setConfirmArchive(false);
 		setMenuOpen(true);
 	};
 
@@ -210,21 +210,24 @@ export function SessionRow({
 						<span>打开文件夹</span>
 					</button>
 					<div className="omp-session-menu-seg" />
-					{confirmDelete ? (
+					{confirmArchive ? (
 						<div className="omp-session-confirm">
-							<p>只从列表移除，omp 里的对话记录仍保留。</p>
+							<p>
+								归档会关闭 omp 会话并从本地列表移除，不会删除 omp
+								服务端保存的对话记录文件。确认归档吗？
+							</p>
 							<div className="omp-session-confirm-actions">
 								<button
 									type="button"
 									className="danger"
 									onClick={() => {
 										closeMenu();
-										void onDelete(session);
+										void onArchive(session);
 									}}
 								>
-									删除
+									归档
 								</button>
-								<button type="button" onClick={() => setConfirmDelete(false)}>
+								<button type="button" onClick={() => setConfirmArchive(false)}>
 									取消
 								</button>
 							</div>
@@ -234,10 +237,10 @@ export function SessionRow({
 							type="button"
 							role="menuitem"
 							className="danger"
-							onClick={() => setConfirmDelete(true)}
+							onClick={() => setConfirmArchive(true)}
 						>
-							<Icon name="trash" size={14} />
-							<span>删除任务</span>
+							<Icon name="archive" size={14} />
+							<span>归档会话</span>
 						</button>
 					)}
 				</div>

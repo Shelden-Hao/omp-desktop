@@ -38,6 +38,7 @@ export type IconName =
 	| "pin"
 	| "pencil"
 	| "trash"
+	| "archive"
 	| "terminal";
 
 export function Icon({
@@ -193,6 +194,12 @@ export function Icon({
 			return (
 				<svg {...common}>
 					<path d="M4 7h16M9 7V4h6v3M6.5 7l1 13h9l1-13M10 11v6M14 11v6" />
+				</svg>
+			);
+		case "archive":
+			return (
+				<svg {...common}>
+					<path d="M3 5h18v4H3V5Zm2 4v11h14V9M10 13h4" />
 				</svg>
 			);
 		case "terminal":
